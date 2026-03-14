@@ -1,17 +1,32 @@
 <script lang="ts">
-  import { login } from "$lib/stores/app.js";
+  import { goto } from "$app/navigation";
   import Logo from "$lib/ui/Logo.svelte";
   import { toast } from "svelte-sonner";
+
+  let loading = $state(false);
 
   let email = $state("admin@innoserve.com");
   let password = $state("sa");
   let rememberMe = $state(false);
 
   function handleLogin(e: any) {
+    loading = true;
     e.preventDefault();
 
     console.log("Login attempted with:", { email, password, rememberMe });
-    toast.success("Login successful! Redirecting...");
+    if (!email || !password) {
+      toast.error("Please enter both email and password.");
+      loading = false;
+      return;
+    } else if (email !== "admin@innoserve.com" || password !== "sa") {
+      toast.error("Invalid email or password.");
+      loading = false;
+      return;
+    } else {
+      toast.success("Login successful! Redirecting...");
+      goto("/data");
+      loading = false;
+    }
   }
 </script>
 
@@ -54,7 +69,7 @@
         LOGIN
       </h2>
 
-      <form class="flex flex-col gap-5" onsubmit={handleLogin}>
+      <form class="flex flex-col gap-5">
         <div class="w-full">
           <input
             type="email"
@@ -94,6 +109,7 @@
 
         <button
           onclick={handleLogin}
+          disabled={loading}
           class="w-full py-3.5 mt-2 bg-[#183e58] hover:bg-[#1e4d6e] text-white border-none rounded-lg text-[15px] font-semibold tracking-[1px] cursor-pointer transition-colors duration-200 font-[Poppins]"
         >
           LOGIN
