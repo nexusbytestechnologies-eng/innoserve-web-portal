@@ -1,5 +1,6 @@
 <script>
   import { onMount } from "svelte";
+  import * as Icons from "$lib/icons";
 
   let activeFilter = $state("All");
   const filters = ["All", "Open", "Pending", "Resolved", "New Tickets"];
@@ -10,7 +11,7 @@
       value: "1,250",
       trend: "+12%",
       trendDir: "up",
-      color: "#183E58",
+      color: "#0B182A",
       icon: "ticket",
     },
     {
@@ -123,65 +124,15 @@
           style="background-color: {stat.color}15;"
         >
           {#if stat.icon === "ticket"}
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke={stat.color}
-              stroke-width="2"
-              ><rect x="2" y="4" width="20" height="16" rx="2" /><path
-                d="M2 10h20"
-              /></svg
-            >
+            <Icons.TicketCard size={20} stroke={stat.color} />
           {:else if stat.icon === "open"}
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke={stat.color}
-              stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg
-            >
+            <Icons.Activity size={20} stroke={stat.color} />
           {:else if stat.icon === "pending"}
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke={stat.color}
-              stroke-width="2"
-              ><circle cx="12" cy="12" r="10" /><polyline
-                points="12 6 12 12 16 14"
-              /></svg
-            >
+            <Icons.Clock size={20} stroke={stat.color} />
           {:else if stat.icon === "resolved"}
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke={stat.color}
-              stroke-width="2"
-              ><path d="M22 11.08V12a10 10 0 11-5.93-9.14" /><polyline
-                points="22 4 12 14.01 9 11.01"
-              /></svg
-            >
+            <Icons.CheckCircle size={20} stroke={stat.color} />
           {:else if stat.icon === "closed"}
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke={stat.color}
-              stroke-width="2"
-              ><rect x="3" y="3" width="18" height="18" rx="2" /><line
-                x1="9"
-                y1="9"
-                x2="15"
-                y2="15"
-              /><line x1="15" y1="9" x2="9" y2="15" /></svg
-            >
+            <Icons.XSquare size={20} stroke={stat.color} />
           {/if}
         </div>
 
@@ -194,7 +145,7 @@
           {stat.trend}
         </span>
 
-        <div class="text-[22px] font-bold text-[#183E58]">{stat.value}</div>
+        <div class="text-[22px] font-bold text-[#0B182A]">{stat.value}</div>
         <div class="text-[13px] text-gray-400">{stat.label}</div>
       </div>
     {/each}
@@ -206,7 +157,7 @@
     <div class="bg-white rounded-2xl p-6 border-amber-50 shadow">
       <div class="flex justify-between items-start mb-5">
         <div>
-          <h3 class="text-base font-semibold text-[#183E58]">
+          <h3 class="text-base font-semibold text-[#0B182A]">
             Ticket Status Distribution
           </h3>
           <p class="text-[12px] text-gray-400 mt-0.5">
@@ -214,7 +165,7 @@
           </p>
         </div>
         <select
-          class="px-3 py-1.5 border border-gray-200 rounded-md text-[12px] text-green-600 bg-green-50 cursor-pointer outline-none font-[Poppins]"
+          class="px-3 py-1.5 border border-gray-200 rounded-md text-[12px] text-green-600 bg-green-50 cursor-pointer outline-none"
         >
           <option>This Month</option>
           <option>Last Month</option>
@@ -243,7 +194,7 @@
             text-anchor="middle"
             font-size="32"
             font-weight="700"
-            fill="#183E58">1,250</text
+            fill="#0B182A">1,250</text
           >
           <text
             x="120"
@@ -263,7 +214,7 @@
               style="background-color: {d.color};"
             ></span>
             <span class="text-[13px] text-gray-500">{d.label}</span>
-            <span class="text-[14px] font-semibold text-[#183E58] ml-auto"
+            <span class="text-[14px] font-semibold text-[#0B182A] ml-auto"
               >{d.value}</span
             >
           </div>
@@ -280,23 +231,13 @@
           <div
             class="w-10.5 h-10.5 rounded-[10px] bg-blue-100 flex items-center justify-center shrink-0"
           >
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#3b82f6"
-              stroke-width="2"
-              ><circle cx="12" cy="12" r="10" /><polyline
-                points="12 6 12 12 16 14"
-              /></svg
-            >
+            <Icons.Clock size={20} stroke="#3b82f6" />
           </div>
           <div>
             <p class="text-[13px] text-gray-500 mb-0.5">
               Average Response Time
             </p>
-            <p class="text-[20px] font-bold text-[#183E58]">
+            <p class="text-[20px] font-bold text-[#0B182A]">
               2.4 <span class="text-[14px] font-normal text-gray-400">hrs</span>
             </p>
           </div>
@@ -318,25 +259,11 @@
           <div
             class="w-10.5 h-10.5 rounded-[10px] bg-amber-100 flex items-center justify-center shrink-0"
           >
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#f59e0b"
-              stroke-width="2"
-              ><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle
-                cx="9"
-                cy="7"
-                r="4"
-              /><path d="M23 21v-2a4 4 0 00-3-3.87" /><path
-                d="M16 3.13a4 4 0 010 7.75"
-              /></svg
-            >
+            <Icons.Users size={20} stroke="#f59e0b" />
           </div>
           <div>
             <p class="text-[13px] text-gray-500 mb-0.5">Active Agents</p>
-            <p class="text-[20px] font-bold text-[#183E58]">
+            <p class="text-[20px] font-bold text-[#0B182A]">
               <span class="text-accent">28</span>/ 34
             </p>
           </div>
@@ -350,17 +277,7 @@
           <div
             class="w-10.5 h-10.5 rounded-[10px] bg-green-100 flex items-center justify-center shrink-0"
           >
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#22c55e"
-              stroke-width="2"
-              ><path d="M22 11.08V12a10 10 0 11-5.93-9.14" /><polyline
-                points="22 4 12 14.01 9 11.01"
-              /></svg
-            >
+            <Icons.CheckCircle size={20} stroke="#22c55e" />
           </div>
           <div>
             <p class="text-[13px] text-gray-500 mb-0.5">Resolution Rate</p>
@@ -376,17 +293,7 @@
           <div
             class="w-10.5 h-10.5 rounded-[10px] bg-amber-100 flex items-center justify-center shrink-0"
           >
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#f59e0b"
-              stroke-width="2"
-              ><path
-                d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
-              /></svg
-            >
+            <Icons.Star size={20} stroke="#f59e0b" />
           </div>
           <div>
             <p class="text-[13px] text-gray-500 mb-0.5">
@@ -405,7 +312,7 @@
   <div class="bg-white rounded-2xl p-6 border-amber-50 shadow">
     <div class="flex justify-between items-start mb-5 flex-wrap gap-4">
       <div>
-        <h3 class="text-[18px] font-semibold text-[#183E58]">Recent Tickets</h3>
+        <h3 class="text-[18px] font-semibold text-[#0B182A]">Recent Tickets</h3>
         <p class="text-[12px] text-gray-400 mt-0.5">
           Latest customer Support Request
         </p>
@@ -415,34 +322,21 @@
         <div
           class="flex items-center gap-2 px-3 py-1.5 border border-gray-200 rounded-lg max-w-40"
         >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="#9ca3af"
-            stroke-width="2"
-            ><circle cx="11" cy="11" r="8" /><line
-              x1="21"
-              y1="21"
-              x2="16.65"
-              y2="16.65"
-            /></svg
-          >
+          <Icons.Search size={16} stroke="#9ca3af" />
           <input
             type="text"
             placeholder="Search"
-            class="text-[12px] outline-none border-none w-full text-gray-600 placeholder:text-gray-400 font-[Poppins]"
+            class="text-[12px] outline-none border-none w-full text-gray-600 placeholder:text-gray-400"
           />
         </div>
         <!-- Filter chips -->
         {#each filters as f}
           <button
             onclick={() => (activeFilter = f)}
-            class="px-4 py-1.5 rounded-full border text-[12px] font-[Poppins] cursor-pointer transition-all duration-150
+            class="px-4 py-1.5 rounded-full border text-[12px] cursor-pointer transition-all duration-150
                    {activeFilter === f
-              ? 'bg-[#183E58] text-white border-[#183E58]'
-              : 'bg-white text-gray-500 border-gray-200 hover:border-[#183E58]'}"
+              ? 'bg-[linear-gradient(to_bottom,#0B182A,#021E44)] text-white border-[#0B182A]'
+              : 'bg-white text-gray-500 border-gray-200 hover:border-[#0B182A]'}"
             >{f}</button
           >
         {/each}
@@ -516,19 +410,9 @@
               <td class="py-3 px-3">
                 <!-- svelte-ignore a11y_consider_explicit_label -->
                 <button
-                  class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-[#183E58] transition-colors"
+                  class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-[#0B182A] transition-colors"
                 >
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    ><path
-                      d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"
-                    /><circle cx="12" cy="12" r="3" /></svg
-                  >
+                  <Icons.Eye size={16} />
                 </button>
               </td>
             </tr>
@@ -547,10 +431,10 @@
       <div class="flex items-center gap-1">
         {#each ["< Previous", "1", "2", "3", "120", "Next >"] as page}
           <button
-            class="px-3 py-1.5 text-[12px] rounded-md border font-[Poppins] transition-colors
+            class="px-3 py-1.5 text-[12px] rounded-md border transition-colors
                    {page === '1'
-              ? 'bg-[#183E58] text-white border-[#183E58]'
-              : 'bg-white text-gray-500 border-gray-200 hover:border-[#183E58] hover:text-[#183E58]'}
+              ? 'bg-[linear-gradient(to_bottom,#0B182A,#021E44)] text-white border-[#0B182A]'
+              : 'bg-white text-gray-500 border-gray-200 hover:border-[#0B182A] hover:text-[#0B182A]'}
                    {page === '< Previous'
               ? 'opacity-40 cursor-not-allowed'
               : 'cursor-pointer'}"

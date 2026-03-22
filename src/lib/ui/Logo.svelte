@@ -1,7 +1,7 @@
 <div class="logo-placeholder">
   <svg width="44" height="44" viewBox="0 0 44 44" fill="none">
     <rect width="44" height="44" rx="10" fill="#E87D1F" />
-    <path d="M12 22L22 12L32 22L22 32L12 22Z" fill="#183E58" />
+    <path d="M12 22L22 12L32 22L22 32L12 22Z" fill="#0B182A" />
     <path d="M17 22L22 17L27 22L22 27L17 22Z" fill="white" />
   </svg>
   <div class="logo-text-login">
@@ -29,14 +29,14 @@
   .lt-title {
     font-size: 18px;
     font-weight: 800;
-    color: #183e58;
+    color: #0B182A;
     letter-spacing: 1.5px;
   }
 
   .lt-sub {
     font-size: 18px;
     font-weight: 800;
-    color: #183e58;
+    color: #0B182A;
     letter-spacing: 1.5px;
   }
 
