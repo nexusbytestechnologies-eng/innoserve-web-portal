@@ -1,8 +1,9 @@
 <script lang="ts">
-  import { currentPage, logout } from "../stores/app.js";
+  import { page } from "$app/state";
+  import { logout, toggleMobileSidebar } from "../stores/app.js";
   import * as Icons from "$lib/icons";
 
-  const pageTitles = {
+  const pageTitles: Record<string, string> = {
     dashboard: "Dashboard",
     tickets: "Tickets",
     "bulk-upload": "Bulk Upload",
@@ -13,37 +14,54 @@
     reports: "Reports",
   };
 
+  const currentPage = $derived(
+    page.url.pathname.replace("/data", "").replace(/^\//, "") || "dashboard"
+  );
+
   let showDropdown = $state(false);
 </script>
 
 <header
-  class="flex items-center justify-between px-8 py-4 bg-transparent shadow"
+  class="flex items-center justify-between px-4 md:px-8 py-4 bg-transparent shadow"
 >
-  <h1 class="text-[22px] font-semibold text-[#0B182A]">
-    {pageTitles[$currentPage as keyof typeof pageTitles] || "Dashboard"}
+  <!-- Hamburger button — mobile only -->
+  <button
+    class="md:hidden mr-3 w-9 h-9 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors shrink-0"
+    onclick={toggleMobileSidebar}
+    aria-label="Open sidebar"
+  >
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0B182A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="3" y1="6" x2="21" y2="6"/>
+      <line x1="3" y1="12" x2="21" y2="12"/>
+      <line x1="3" y1="18" x2="21" y2="18"/>
+    </svg>
+  </button>
+
+  <h1 class="text-[18px] md:text-[22px] font-semibold text-[#0B182A] flex-1">
+    {pageTitles[currentPage] || "Dashboard"}
   </h1>
 
-  <div class="flex items-center gap-4">
-    <span class="text-[14px] text-[#0B182A] font-normal">
+  <div class="flex items-center gap-2 md:gap-4">
+    <span class="hidden md:inline text-[14px] text-[#0B182A] font-normal">
       Welcome Back, <strong class="font-semibold">John</strong>
     </span>
 
     <!-- Notification Bell -->
     <button
-      class="relative w-10 h-10 rounded-[10px] border border-gray-200 bg-white
+      class="relative w-9 h-9 md:w-10 md:h-10 rounded-[10px] border border-gray-200 bg-white
              flex items-center justify-center cursor-pointer
              transition-all duration-150 ease-in-out hover:border-[#0B182A]"
     >
-      <Icons.Bell size={20} stroke="#0B182A" />
+      <Icons.Bell size={18} stroke="#0B182A" />
       <span
-        class="absolute top-2 right-2.5 w-2 h-2 rounded-full bg-[#E87D1F] border-2 border-white"
+        class="absolute top-2 right-2 md:right-2.5 w-2 h-2 rounded-full bg-[#E87D1F] border-2 border-white"
       ></span>
     </button>
 
     <!-- User Avatar -->
     <div class="relative">
       <button
-        class="w-10 h-10 rounded-full overflow-hidden border-2 border-gray-200 cursor-pointer p-0 bg-transparent"
+        class="w-9 h-9 md:w-10 md:h-10 rounded-full overflow-hidden border-2 border-gray-200 cursor-pointer p-0 bg-transparent"
         onclick={() => (showDropdown = !showDropdown)}
       >
         <img

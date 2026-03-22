@@ -2,6 +2,7 @@ import { writable } from "svelte/store";
 
 export const currentPage = writable("login");
 export const sidebarCollapsed = writable(false);
+export const mobileOpen = writable(false);
 export const isLoggedIn = writable(false);
 
 /**
@@ -13,6 +14,14 @@ export function navigateTo(page) {
 
 export function toggleSidebar() {
   sidebarCollapsed.update((v) => !v);
+}
+
+export function toggleMobileSidebar() {
+  mobileOpen.update((v) => !v);
+}
+
+export function closeMobileSidebar() {
+  mobileOpen.set(false);
 }
 
 export function login() {

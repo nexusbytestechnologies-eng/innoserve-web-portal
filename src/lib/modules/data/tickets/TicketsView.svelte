@@ -122,7 +122,7 @@
     </div>
 
     <!-- Table Footer -->
-    <div class="flex items-center justify-between pt-4 border-t border-border-light mt-2">
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between pt-4 border-t border-border-light mt-2 gap-3">
       <span class="text-[13px] text-gray-500">Showing <strong>1–9</strong> of 1,250 Tickets</span>
       <div class="flex items-center gap-1">
         {#each ["< Previous", "1", "2", "3", "120", "Next >"] as page}

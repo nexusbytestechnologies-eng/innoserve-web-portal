@@ -114,7 +114,7 @@
 
 <div class="flex flex-col gap-6">
   <!-- Stat Cards Row -->
-  <div class="grid grid-cols-5 gap-4">
+  <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
     {#each stats as stat}
       <div
         class="bg-white rounded-2xl p-5 shadow border border-amber-50 flex flex-col gap-1 relative"
@@ -152,7 +152,7 @@
   </div>
 
   <!-- Middle Section: Donut Chart + Metrics -->
-  <div class="grid grid-cols-2 gap-6">
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
     <!-- Donut Chart Card -->
     <div class="bg-white rounded-2xl p-6 border-amber-50 shadow">
       <div class="flex justify-between items-start mb-5">
@@ -423,7 +423,7 @@
 
     <!-- Table Footer -->
     <div
-      class="flex items-center justify-between pt-4 border-t border-border-light mt-2"
+      class="flex flex-col sm:flex-row items-start sm:items-center justify-between pt-4 border-t border-border-light mt-2 gap-3"
     >
       <span class="text-[13px] text-gray-500">
         Showing <strong>1–9</strong> of 1,250 Tickets

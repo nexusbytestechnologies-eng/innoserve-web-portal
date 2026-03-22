@@ -47,7 +47,7 @@
   </div>
 
   <!-- Engineer Cards Grid -->
-  <div class="grid grid-cols-3 gap-5">
+  <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
     {#each engineers as eng}
       <div class="bg-white rounded-2xl p-5 border border-gray-200 hover:shadow-md transition-shadow duration-200">
         <!-- Card Header -->
@@ -89,7 +89,7 @@
   </div>
 
   <!-- Pagination -->
-  <div class="flex items-center justify-between bg-white rounded-xl px-6 py-4 shadow">
+  <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-white rounded-xl px-6 py-4 shadow gap-3">
     <span class="text-[13px] text-gray-500">Showing <strong>1–9</strong> of 78 Engineers</span>
     <div class="flex items-center gap-1">
       {#each ["< Previous", "1", "2", "3", "78", "Next >"] as page}
