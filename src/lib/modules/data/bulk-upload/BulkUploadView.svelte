@@ -11,7 +11,7 @@
 
 <div class="flex flex-col gap-6">
   <!-- Upload Section -->
-  <div class="grid gap-6" style="grid-template-columns: 1fr 350px;">
+  <div class="grid grid-cols-1 xl:grid-cols-[1fr_350px] gap-6">
     <!-- Upload Area -->
     <div class="bg-white rounded-2xl p-6 shadow">
       <div class="flex justify-between items-start">
@@ -114,6 +114,7 @@
       </div>
     </div>
 
+    <div class="overflow-x-auto">
     <table class="w-full text-sm border-collapse">
       <thead>
         <tr class="bg-[#f0f5fa] rounded-lg">
@@ -161,8 +162,9 @@
         {/each}
       </tbody>
     </table>
+    </div>
 
-    <div class="flex items-center justify-between pt-4 border-t border-[#f0f0f0] mt-2">
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between pt-4 border-t border-[#f0f0f0] mt-2 gap-3">
       <span class="text-[13px] text-gray-500">Showing <strong>1–2</strong> of 24 Uploads</span>
       <div class="flex gap-1 items-center">
         <button disabled class="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-400 border border-gray-200 rounded-lg bg-white cursor-not-allowed">

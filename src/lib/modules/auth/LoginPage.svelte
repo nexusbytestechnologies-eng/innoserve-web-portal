@@ -30,10 +30,10 @@
   }
 </script>
 
-<div class="flex min-h-screen w-full">
-  <!-- Left Side - Dark Background with Welcome Text -->
+<div class="flex flex-col md:flex-row min-h-screen w-full">
+  <!-- Left Side - Dark Background with Welcome Text (hidden on mobile) -->
   <div
-    class="flex-[0_0_45%] bg-[linear-gradient(135deg,#0f2b3d_0%,#183e58_40%,#1a3a52_100%)] flex items-end px-12.5 py-15 relative overflow-hidden"
+    class="hidden md:flex flex-[0_0_45%] bg-[linear-gradient(135deg,#0f2b3d_0%,#183e58_40%,#1a3a52_100%)] items-end px-12.5 py-15 relative overflow-hidden"
   >
     <!-- Replaces ::before pseudo-element -->
     <div
@@ -55,7 +55,7 @@
 
   <!-- Right Side - Login Form -->
   <div
-    class="flex-[0_0_55%] flex items-center justify-center bg-[#faf9f6] p-10"
+    class="flex-1 md:flex-[0_0_55%] flex items-center justify-center bg-[#faf9f6] p-6 md:p-10"
   >
     <div class="w-full max-w-100">
       <!-- Logo -->

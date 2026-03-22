@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { sidebarCollapsed, toggleSidebar } from "../stores/app.js";
+  import { sidebarCollapsed, toggleSidebar, mobileOpen, closeMobileSidebar } from "../stores/app.js";
   import * as Icons from "$lib/icons";
 
   const menuItems = [
@@ -18,24 +18,29 @@
 
   const navigateTo = (pageId: string) => {
     goto(`/data/${pageId === "dashboard" ? "" : pageId}`);
+    closeMobileSidebar();
   };
 
   const currentPage = $derived(
     page.url.pathname.replace("/data", "").replace(/^\//, "") || "dashboard",
   );
+
+  // Show full content (labels) when desktop expanded OR mobile open
+  const showLabels = $derived(!$sidebarCollapsed || $mobileOpen);
 </script>
 
 <aside
-  class=" top-0 left-0 h-screen flex flex-col z-100
+  class="fixed top-0 left-0 h-screen flex flex-col z-50
          transition-[width,transform] duration-300 ease-in-out overflow-visible
-         {$sidebarCollapsed
-    ? 'w-17.5 -translate-x-full md:translate-x-0'
-    : 'w-55 translate-x-0'}"
+         w-64
+         {$sidebarCollapsed ? 'md:w-17.5' : 'md:w-55'}
+         {$mobileOpen ? 'translate-x-0' : '-translate-x-full'}
+         md:translate-x-0"
   style="background: linear-gradient(to bottom, #0B182A, #021E44);"
 >
   <!-- Logo Area -->
   <div class="px-4 py-5 border-b border-white/8 min-h-20 flex items-center">
-    {#if !$sidebarCollapsed}
+    {#if showLabels}
       <div class="flex items-center gap-2.5 whitespace-nowrap overflow-hidden">
         <div class="shrink-0">
           <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
@@ -67,10 +72,10 @@
     {/if}
   </div>
 
-  <!-- Toggle Button — overlaps sidebar edge -->
+  <!-- Desktop Toggle Button — overlaps sidebar edge, hidden on mobile -->
   <button
     onclick={toggleSidebar}
-    class="absolute top-20.5 -right-3.5 w-7 h-7 rounded-full border-2 border-[#F5F6FA] flex items-center justify-center cursor-pointer z-101 shadow transition-all duration-200 ease-in-out hover:scale-110"
+    class="hidden md:flex absolute top-20.5 -right-3.5 w-7 h-7 rounded-full border-2 border-[#F5F6FA] items-center justify-center cursor-pointer z-101 shadow transition-all duration-200 ease-in-out hover:scale-110"
     style="background: linear-gradient(to bottom, #0B182A, #021E44);"
   >
     {#if $sidebarCollapsed}
@@ -87,11 +92,11 @@
     {#each menuItems as item}
       <button
         onclick={() => navigateTo(item.id)}
-        title={$sidebarCollapsed ? item.label : ""}
+        title={!showLabels ? item.label : ""}
         class="flex items-center rounded-lg border-none cursor-pointer
                  text-[14px] font-normal whitespace-nowrap overflow-hidden w-full
                transition-all duration-200 ease-in-out
-               {$sidebarCollapsed
+               {!showLabels
           ? 'justify-center p-3'
           : 'gap-3 px-3.5 py-3 text-left'}
                {currentPage === item.id
@@ -119,7 +124,7 @@
           {/if}
         </span>
 
-        {#if !$sidebarCollapsed}
+        {#if showLabels}
           <span class="overflow-hidden text-ellipsis">{item.label}</span>
         {/if}
       </button>

@@ -126,7 +126,7 @@
 
     <!-- Card View -->
     {#if view === "card"}
-      <div class="grid grid-cols-3 gap-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
         {#each projects as p}
           <div class="border border-gray-100 rounded-2xl p-5 hover:shadow-md transition-shadow">
             <div class="flex items-start justify-between gap-2">
@@ -171,7 +171,7 @@
     {/if}
 
     <!-- Pagination -->
-    <div class="flex items-center justify-between pt-4 border-t border-gray-100 mt-4">
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between pt-4 border-t border-gray-100 mt-4 gap-3">
       <span class="text-[13px] text-gray-500">Showing <strong>1–9</strong> of 48 Projects</span>
       <div class="flex items-center gap-1">
         {#each ["< Previous", "1", "2", "3", "...", "48", "Next >"] as page}

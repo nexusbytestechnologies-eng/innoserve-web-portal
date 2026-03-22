@@ -72,7 +72,7 @@
   </div>
 
   <!-- Stats Row -->
-  <div class="grid grid-cols-4 gap-4">
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
     {#each reportStats as stat}
       <div class="bg-white rounded-2xl p-5 border border-gray-100 flex flex-col gap-2">
         <div class="flex justify-between items-start">
@@ -93,7 +93,7 @@
   </div>
 
   <!-- Chart + Quick Insights -->
-  <div class="grid gap-6" style="grid-template-columns: 1fr 340px;">
+  <div class="grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-6">
     <!-- Bar Chart -->
     <div class="bg-white rounded-2xl p-6 border border-gray-100">
       <div class="flex justify-between items-start mb-6">
@@ -246,7 +246,7 @@
       </table>
     </div>
 
-    <div class="flex items-center justify-between pt-4 border-t border-gray-100 mt-2">
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between pt-4 border-t border-gray-100 mt-2 gap-3">
       <span class="text-[13px] text-gray-500">Showing <strong>1–2</strong> of 10 States</span>
       <div class="flex items-center gap-1">
         {#each ["< Previous", "1", "2", "3", "10", "Next >"] as page}

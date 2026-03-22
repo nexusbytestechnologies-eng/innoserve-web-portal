@@ -110,7 +110,7 @@
 
 <div class="flex flex-col gap-5">
   <!-- Stat Cards -->
-  <div class="grid grid-cols-4 gap-4">
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
     {#each inventoryStats as stat}
       <div
         class="bg-white rounded-2xl p-5 border border-gray-100 flex flex-col gap-2"
@@ -279,7 +279,7 @@
 
     <!-- Table Footer -->
     <div
-      class="flex items-center justify-between pt-4 border-t border-gray-100 mt-2"
+      class="flex flex-col sm:flex-row items-start sm:items-center justify-between pt-4 border-t border-gray-100 mt-2 gap-3"
     >
       <span class="text-[13px] text-gray-500"
         >Showing <strong>1–8</strong> of 48 Items</span

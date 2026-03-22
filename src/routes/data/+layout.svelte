@@ -2,20 +2,30 @@
   import "../layout.css";
   import Sidebar from "$lib/ui/Sidebar.svelte";
   import Header from "$lib/ui/Header.svelte";
-  import { sidebarCollapsed } from "$lib/stores/app";
+  import { sidebarCollapsed, mobileOpen, closeMobileSidebar } from "$lib/stores/app";
   let { children } = $props();
 </script>
 
 <svelte:head><title>Innoserve Techsol</title></svelte:head>
 
-<div class="flex min-h-screen relative">
-  <Sidebar />
+<!-- Mobile overlay backdrop -->
+{#if $mobileOpen}
+  <div
+    class="fixed inset-0 bg-black/50 z-40 md:hidden"
+    onclick={closeMobileSidebar}
+    role="presentation"
+  ></div>
+{/if}
 
-  <div class="flex flex-col w-full h-screen">
-    <Header />
+<Sidebar />
 
-    <main class="flex-1 px-8 pb-8 overflow-y-auto h-screen bg-stone-100 mt-2">
-      {@render children()}
-    </main>
-  </div>
+<!-- Main content area — offset by sidebar width on desktop -->
+<div
+  class="flex flex-col h-screen transition-[margin-left] duration-300
+         {$sidebarCollapsed ? 'md:ml-17.5' : 'md:ml-55'}"
+>
+  <Header />
+  <main class="flex-1 px-4 md:px-8 pb-8 overflow-y-auto bg-stone-100 mt-2">
+    {@render children()}
+  </main>
 </div>

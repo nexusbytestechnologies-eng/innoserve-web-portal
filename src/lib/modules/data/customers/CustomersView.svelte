@@ -21,7 +21,7 @@
 
 <div class="flex flex-col gap-5">
   <!-- Stat Cards -->
-  <div class="flex w-full gap-6">
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
     {#each customerStats as stat}
       <div class="bg-white rounded-2xl p-5 shadow border border-amber-50 flex flex-col gap-1 relative w-full">
         <div class="w-10 h-10 rounded-xl flex items-center justify-center mb-1" style="background-color: {stat.color}15;">
@@ -127,7 +127,7 @@
       </table>
     </div>
 
-    <div class="flex items-center justify-between pt-4 border-t border-gray-100 mt-2">
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between pt-4 border-t border-gray-100 mt-2 gap-3">
       <span class="text-[13px] text-gray-500">Showing <strong>1–6</strong> of 1,250 Tickets</span>
       <div class="flex items-center gap-1">
         {#each ["< Previous", "1", "2", "3", "120", "Next >"] as page}
