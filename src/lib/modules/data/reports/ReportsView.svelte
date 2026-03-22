@@ -72,20 +72,31 @@
   </div>
 
   <!-- Stats Row -->
-  <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-3 md:gap-4">
     {#each reportStats as stat}
-      <div class="bg-white rounded-2xl p-5 border border-gray-100 flex flex-col gap-2">
-        <div class="flex justify-between items-start">
-          <div class="w-10 h-10 rounded-xl flex items-center justify-center" style="background-color: {stat.color}20;">
-            <Icons.TicketCard size={20} stroke={stat.color} />
-          </div>
-          <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full {stat.trendDir === 'up' ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-500'}">
-            {stat.trend}
-          </span>
+      <div class="bg-white rounded-2xl border border-gray-100 relative overflow-hidden
+                  flex items-center gap-4 px-4 py-3.5
+                  md:flex-col md:items-start md:gap-2 md:p-5">
+        <!-- Coloured accent strip — mobile only -->
+        <div class="absolute top-0 left-0 bottom-0 w-1 md:hidden" style="background-color: {stat.color};"></div>
+        <!-- Icon -->
+        <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+             style="background-color: {stat.color}20;">
+          <Icons.TicketCard size={20} stroke={stat.color} />
         </div>
-        <div class="text-[26px] font-bold text-[#0B182A]">{stat.value}</div>
-        <div class="text-[12px] text-gray-500">{stat.label}</div>
-        <div class="h-1 bg-gray-100 rounded-full overflow-hidden mt-1">
+        <!-- Value + label -->
+        <div class="flex-1 min-w-0 md:flex-none">
+          <div class="text-[21px] md:text-[26px] font-bold text-[#0B182A] leading-tight">{stat.value}</div>
+          <div class="text-[12px] text-gray-500">{stat.label}</div>
+        </div>
+        <!-- Trend badge — inline on mobile, absolute on desktop -->
+        <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full shrink-0
+                     md:absolute md:top-4 md:right-4
+                     {stat.trendDir === 'up' ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-500'}">
+          {stat.trend}
+        </span>
+        <!-- Progress bar — desktop only -->
+        <div class="hidden md:block h-1 bg-gray-100 rounded-full overflow-hidden w-full mt-1">
           <div class="h-full rounded-full w-[70%]" style="background-color: {stat.color};"></div>
         </div>
       </div>

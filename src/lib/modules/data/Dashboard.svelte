@@ -114,14 +114,23 @@
 
 <div class="flex flex-col gap-6">
   <!-- Stat Cards Row -->
-  <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+  <div class="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4">
     {#each stats as stat}
       <div
-        class="bg-white rounded-2xl p-5 shadow border border-amber-50 flex flex-col gap-1 relative"
+        class="bg-white rounded-2xl shadow border border-amber-50 relative overflow-hidden
+               flex items-center gap-4 px-4 py-3.5
+               sm:flex-col sm:items-start sm:gap-1 sm:p-5"
       >
+        <!-- Coloured accent strip — mobile only -->
         <div
-          class="w-10 h-10 rounded-xl flex items-center justify-center mb-1"
-          style="background-color: {stat.color}15;"
+          class="absolute top-0 left-0 bottom-0 w-1 sm:hidden"
+          style="background-color: {stat.color};"
+        ></div>
+
+        <!-- Icon -->
+        <div
+          class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 sm:mb-1"
+          style="background-color: {stat.color}18;"
         >
           {#if stat.icon === "ticket"}
             <Icons.TicketCard size={20} stroke={stat.color} />
@@ -136,17 +145,24 @@
           {/if}
         </div>
 
+        <!-- Value + label -->
+        <div class="flex-1 min-w-0 sm:flex-none">
+          <div class="text-[21px] sm:text-[22px] font-bold text-[#0B182A] leading-tight">
+            {stat.value}
+          </div>
+          <div class="text-[12px] sm:text-[13px] text-gray-400">{stat.label}</div>
+        </div>
+
+        <!-- Trend badge — inline on mobile, absolute on desktop -->
         <span
-          class="absolute top-4 right-4 text-[11px] font-semibold px-2 py-0.5 rounded-full
-                     {stat.trendDir === 'up'
+          class="text-[11px] font-semibold px-2 py-0.5 rounded-full shrink-0
+                 sm:absolute sm:top-4 sm:right-4
+                 {stat.trendDir === 'up'
             ? 'text-green-600 bg-green-50'
             : 'text-red-500 bg-red-50'}"
         >
           {stat.trend}
         </span>
-
-        <div class="text-[22px] font-bold text-[#0B182A]">{stat.value}</div>
-        <div class="text-[13px] text-gray-400">{stat.label}</div>
       </div>
     {/each}
   </div>

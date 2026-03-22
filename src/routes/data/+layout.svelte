@@ -3,7 +3,15 @@
   import Sidebar from "$lib/ui/Sidebar.svelte";
   import Header from "$lib/ui/Header.svelte";
   import { sidebarCollapsed, mobileOpen, closeMobileSidebar } from "$lib/stores/app";
+  import { afterNavigate } from "$app/navigation";
+
   let { children } = $props();
+
+  let mainEl: HTMLElement;
+
+  afterNavigate(() => {
+    mainEl?.scrollTo({ top: 0 });
+  });
 </script>
 
 <svelte:head><title>Innoserve Techsol</title></svelte:head>
@@ -25,7 +33,7 @@
          {$sidebarCollapsed ? 'md:ml-17.5' : 'md:ml-55'}"
 >
   <Header />
-  <main class="flex-1 px-4 md:px-8 pb-8 overflow-y-auto bg-stone-100 mt-2">
+  <main bind:this={mainEl} class="flex-1 px-4 md:px-8 pb-8 overflow-y-auto bg-stone-100 mt-2">
     {@render children()}
   </main>
 </div>
