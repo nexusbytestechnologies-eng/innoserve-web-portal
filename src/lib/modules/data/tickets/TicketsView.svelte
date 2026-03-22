@@ -1,7 +1,20 @@
-<script>
+<script lang="ts">
   import * as Icons from "$lib/icons";
+  import TicketForm from "./TicketForm.svelte";
 
-  const tickets = [
+  type Ticket = {
+    id: string;
+    issue: string;
+    sub: string;
+    sla: string;
+    place: string;
+    engineer: string;
+    status: string;
+    priority: string;
+    date: string;
+  };
+
+  let tickets = $state<Ticket[]>([
     { id: "TKT001", issue: "Database Error", sub: "SBI Bank", sla: "Breached", place: "Kerala", engineer: "Arun", status: "Open", priority: "High", date: "12/03/2026" },
     { id: "TKT002", issue: "Network Device Failure", sub: "SBI Bank", sla: "On Track", place: "Tamil Nadu", engineer: "Anandhu", status: "Open", priority: "Medium", date: "12/03/2026" },
     { id: "TKT003", issue: "Software Crash", sub: "SBI Bank", sla: "On Track", place: "Maharashtra", engineer: "Akshay", status: "Open", priority: "Low", date: "12/03/2026" },
@@ -11,7 +24,33 @@
     { id: "TKT007", issue: "Database Error", sub: "SBI Bank", sla: "On Track", place: "Delhi", engineer: "Basi", status: "Open", priority: "Medium", date: "12/03/2026" },
     { id: "TKT008", issue: "Database Error", sub: "SBI Bank", sla: "On Track", place: "Goa", engineer: "Kiran", status: "Open", priority: "Low", date: "12/03/2026" },
     { id: "TKT009", issue: "Database Error", sub: "SBI Bank", sla: "Breached", place: "Kerala", engineer: "Varun", status: "Open", priority: "High", date: "12/03/2026" },
-  ];
+  ]);
+
+  let showForm = $state(false);
+  let formMode = $state<"add" | "edit">("add");
+  let editData = $state<Ticket | null>(null);
+
+  function openAdd() {
+    formMode = "add";
+    editData = null;
+    showForm = true;
+  }
+
+  function openEdit(ticket: Ticket) {
+    formMode = "edit";
+    editData = { ...ticket };
+    showForm = true;
+  }
+
+  function handleSave(form: Record<string, string>) {
+    if (formMode === "add") {
+      const newId = `TKT${String(tickets.length + 1).padStart(3, "0")}`;
+      tickets = [...tickets, { id: newId, ...form } as Ticket];
+    } else if (editData) {
+      tickets = tickets.map((t) => (t.id === editData!.id ? { ...t, ...form } : t));
+    }
+    showForm = false;
+  }
 </script>
 
 <div class="flex flex-col gap-5">
@@ -45,7 +84,10 @@
     {/each}
 
     <!-- Create Ticket -->
-    <button class="flex items-center gap-1.5 p-3 bg-[linear-gradient(to_bottom,#0B182A,#021E44)] hover:opacity-90 text-white text-[13px] font-semibold rounded-lg cursor-pointer border-none transition-opacity duration-150 ml-auto">
+    <button
+      onclick={openAdd}
+      class="flex items-center gap-1.5 p-3 bg-[linear-gradient(to_bottom,#0B182A,#021E44)] hover:opacity-90 text-white text-[13px] font-semibold rounded-lg cursor-pointer border-none transition-opacity duration-150 ml-auto"
+    >
       <Icons.Plus size={14} strokeWidth={2.5} />
       Create Ticket
     </button>
@@ -57,7 +99,7 @@
     <div class="flex justify-between items-center mb-4">
       <div class="flex items-center gap-3">
         <h3 class="text-[18px] font-semibold text-[#0B182A]">All Tickets</h3>
-        <span class="text-[12px] text-gray-500 bg-gray-100 px-3 py-1 rounded-full">1,250 Total</span>
+        <span class="text-[12px] text-gray-500 bg-gray-100 px-3 py-1 rounded-full">{tickets.length} Total</span>
       </div>
       <div class="flex gap-2">
         <button class="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-lg text-[13px] text-gray-600 bg-white cursor-pointer hover:border-[#0B182A] transition-colors duration-150">
@@ -110,7 +152,11 @@
                   <button aria-label="View ticket details" class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-[#0B182A] hover:bg-gray-100 transition-colors">
                     <Icons.Eye size={16} />
                   </button>
-                  <button aria-label="Edit ticket" class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-[#0B182A] hover:bg-gray-100 transition-colors">
+                  <button
+                    aria-label="Edit ticket"
+                    onclick={() => openEdit(ticket)}
+                    class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-[#0B182A] hover:bg-gray-100 transition-colors"
+                  >
                     <Icons.Edit size={16} />
                   </button>
                 </div>
@@ -123,7 +169,7 @@
 
     <!-- Table Footer -->
     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between pt-4 border-t border-border-light mt-2 gap-3">
-      <span class="text-[13px] text-gray-500">Showing <strong>1–9</strong> of 1,250 Tickets</span>
+      <span class="text-[13px] text-gray-500">Showing <strong>1–{tickets.length}</strong> of {tickets.length} Tickets</span>
       <div class="flex items-center gap-1">
         {#each ["< Previous", "1", "2", "3", "120", "Next >"] as page}
           <button
@@ -136,3 +182,12 @@
     </div>
   </div>
 </div>
+
+{#if showForm}
+  <TicketForm
+    mode={formMode}
+    data={editData}
+    onSave={handleSave}
+    onClose={() => (showForm = false)}
+  />
+{/if}

@@ -1,5 +1,16 @@
-<script>
+<script lang="ts">
   import * as Icons from "$lib/icons";
+  import CustomerForm from "./CustomerForm.svelte";
+
+  type Customer = {
+    id: string;
+    company: string;
+    contact: string;
+    phone: string;
+    location: string;
+    tickets: number;
+    status: string;
+  };
 
   const customerStats = [
     { label: "Total Customers", value: "240", trend: "+10%", trendDir: "up", icon: "users", color: "#0B182A" },
@@ -8,15 +19,42 @@
     { label: "Open Tickets", value: "1,250", trend: "+11%", trendDir: "up", icon: "tickets", color: "#E87D1F" },
   ];
 
-  const customers = [
+  let customers = $state<Customer[]>([
     { id: "CUS001", company: "HDFC Bank", contact: "Arun", phone: "+91 9999999999", location: "Kerala", tickets: 12, status: "Active" },
     { id: "CUS002", company: "SBI Bank", contact: "Anandhu", phone: "+91 9999999999", location: "Tamil Nadu", tickets: 8, status: "Inactive" },
     { id: "CUS003", company: "ICICI Bank", contact: "Akshay", phone: "+91 9999999999", location: "Delhi", tickets: 0, status: "Active" },
     { id: "CUS004", company: "Axis Bank", contact: "Jabbar", phone: "+91 9999999999", location: "Maharashtra", tickets: 15, status: "Inactive" },
     { id: "CUS005", company: "Kotak Bank", contact: "John", phone: "+91 9999999999", location: "Karnataka", tickets: 5, status: "Active" },
     { id: "CUS006", company: "Canara Bank", contact: "Shruthi", phone: "+91 9999999999", location: "Telangana", tickets: 3, status: "Active" },
-    { id: "CUS006", company: "Canara Bank", contact: "Shruthi", phone: "+91 9999999999", location: "Telangana", tickets: 3, status: "Active" },
-  ];
+  ]);
+
+  let showForm = $state(false);
+  let formMode = $state<"add" | "edit">("add");
+  let editData = $state<Customer | null>(null);
+
+  function openAdd() {
+    formMode = "add";
+    editData = null;
+    showForm = true;
+  }
+
+  function openEdit(customer: Customer) {
+    formMode = "edit";
+    editData = { ...customer };
+    showForm = true;
+  }
+
+  function handleSave(form: Record<string, string>) {
+    if (formMode === "add") {
+      const newId = `CUS${String(customers.length + 1).padStart(3, "0")}`;
+      customers = [...customers, { id: newId, tickets: 0, ...form } as Customer];
+    } else if (editData) {
+      customers = customers.map((c) =>
+        c.id === editData!.id ? { ...c, ...form } : c
+      );
+    }
+    showForm = false;
+  }
 </script>
 
 <div class="flex flex-col gap-5">
@@ -63,7 +101,10 @@
       <Icons.ChevronDown size={12} />
     </button>
 
-    <button class="flex items-center gap-1.5 p-3 bg-[linear-gradient(to_bottom,#0B182A,#021E44)] hover:opacity-90 text-white text-[13px] font-semibold rounded-lg cursor-pointer border-none transition-opacity duration-150 ml-auto">
+    <button
+      onclick={openAdd}
+      class="flex items-center gap-1.5 p-3 bg-[linear-gradient(to_bottom,#0B182A,#021E44)] hover:opacity-90 text-white text-[13px] font-semibold rounded-lg cursor-pointer border-none transition-opacity duration-150 ml-auto"
+    >
       <Icons.Plus size={14} strokeWidth={2.5} />
       Add Customer
     </button>
@@ -73,8 +114,8 @@
   <div class="bg-white rounded-2xl p-6 shadow">
     <div class="flex justify-between items-center mb-4">
       <div class="flex items-center gap-3">
-        <h3 class="text-[18px] font-semibold text-[#0B182A]">All Customer</h3>
-        <span class="text-[12px] text-gray-500 bg-gray-100 px-3 py-1 rounded-full">1,250 Total</span>
+        <h3 class="text-[18px] font-semibold text-[#0B182A]">All Customers</h3>
+        <span class="text-[12px] text-gray-500 bg-gray-100 px-3 py-1 rounded-full">{customers.length} Total</span>
       </div>
       <div class="flex gap-2">
         <button class="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-lg text-[13px] text-gray-600 bg-white cursor-pointer hover:border-[#0B182A] transition-colors duration-150">
@@ -116,7 +157,11 @@
                   <button aria-label="View customer details" class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-[#0B182A] hover:bg-gray-100 transition-colors">
                     <Icons.Eye size={16} />
                   </button>
-                  <button aria-label="Edit customer" class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-[#0B182A] hover:bg-gray-100 transition-colors">
+                  <button
+                    aria-label="Edit customer"
+                    onclick={() => openEdit(c)}
+                    class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-[#0B182A] hover:bg-gray-100 transition-colors"
+                  >
                     <Icons.Edit size={16} />
                   </button>
                 </div>
@@ -128,7 +173,7 @@
     </div>
 
     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between pt-4 border-t border-gray-100 mt-2 gap-3">
-      <span class="text-[13px] text-gray-500">Showing <strong>1–6</strong> of 1,250 Tickets</span>
+      <span class="text-[13px] text-gray-500">Showing <strong>1–{customers.length}</strong> of {customers.length} Customers</span>
       <div class="flex items-center gap-1">
         {#each ["< Previous", "1", "2", "3", "120", "Next >"] as page}
           <button
@@ -141,3 +186,12 @@
     </div>
   </div>
 </div>
+
+{#if showForm}
+  <CustomerForm
+    mode={formMode}
+    data={editData}
+    onSave={handleSave}
+    onClose={() => (showForm = false)}
+  />
+{/if}
