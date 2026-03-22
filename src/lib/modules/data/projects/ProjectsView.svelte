@@ -1,9 +1,22 @@
-<script>
+<script lang="ts">
   import * as Icons from "$lib/icons";
+  import ProjectForm from "./ProjectForm.svelte";
+
+  type Project = {
+    id: string;
+    name: string;
+    customer: string;
+    location: string;
+    sla: string;
+    tickets: number;
+    completed: number;
+    status: string;
+    tags: string[];
+  };
 
   let view = $state("table");
 
-  const projects = [
+  let projects = $state<Project[]>([
     { id: "PRJ001", name: "ATM Deployment", customer: "HDFC Bank", location: "Kerala", sla: "4h Response", tickets: 12, completed: 34, status: "Active", tags: ["Hardware", "Networking"] },
     { id: "PRJ002", name: "Server Setup", customer: "SBI Bank", location: "TamilNadu", sla: "2h Response", tickets: 8, completed: 20, status: "Inactive", tags: ["Software", "Deployment"] },
     { id: "PRJ003", name: "Network Upgrade", customer: "ICICI Bank", location: "Maharashtra", sla: "2h Response", tickets: 0, completed: 15, status: "Active", tags: ["Networking"] },
@@ -13,7 +26,58 @@
     { id: "PRJ007", name: "Branch Cabling", customer: "Axis Bank", location: "Rajasthan", sla: "4h Response", tickets: 15, completed: 31, status: "Inactive", tags: ["Hardware", "Networking"] },
     { id: "PRJ008", name: "POS Terminal Install", customer: "Kotak Bank", location: "Delhi", sla: "4h Response", tickets: 5, completed: 10, status: "Active", tags: ["Hardware"] },
     { id: "PRJ009", name: "Biometric Setup", customer: "Canara Bank", location: "Mumbai", sla: "3h Response", tickets: 3, completed: 27, status: "Active", tags: ["Electrical", "Software"] },
-  ];
+  ]);
+
+  let showForm = $state(false);
+  let formMode = $state<"add" | "edit">("add");
+  let editData = $state<Project | null>(null);
+
+  function openAdd() {
+    formMode = "add";
+    editData = null;
+    showForm = true;
+  }
+
+  function openEdit(project: Project) {
+    formMode = "edit";
+    editData = { ...project };
+    showForm = true;
+  }
+
+  function handleSave(form: Record<string, unknown>) {
+    if (formMode === "add") {
+      const newId = `PRJ${String(projects.length + 1).padStart(3, "0")}`;
+      projects = [
+        ...projects,
+        {
+          id: newId,
+          name: form.name as string,
+          customer: form.customer as string,
+          location: form.location as string,
+          sla: form.sla as string,
+          status: form.status as string,
+          tags: form.tags as string[],
+          tickets: 0,
+          completed: 0,
+        },
+      ];
+    } else if (editData) {
+      projects = projects.map((p) =>
+        p.id === editData!.id
+          ? {
+              ...p,
+              name: form.name as string,
+              customer: form.customer as string,
+              location: form.location as string,
+              sla: form.sla as string,
+              status: form.status as string,
+              tags: form.tags as string[],
+            }
+          : p
+      );
+    }
+    showForm = false;
+  }
 </script>
 
 <div class="flex flex-col gap-5">
@@ -42,7 +106,10 @@
       <Icons.ChevronDown size={12} />
     </button>
 
-    <button class="flex items-center gap-1.5 px-4 py-2.5 bg-[#E87D1F] hover:bg-[#E87D1F]/90 text-white text-[13px] font-semibold rounded-lg cursor-pointer border-none transition-colors duration-150 ml-auto">
+    <button
+      onclick={openAdd}
+      class="flex items-center gap-1.5 px-4 py-2.5 bg-[#E87D1F] hover:bg-[#E87D1F]/90 text-white text-[13px] font-semibold rounded-lg cursor-pointer border-none transition-colors duration-150 ml-auto"
+    >
       <Icons.Plus size={14} strokeWidth={2.5} />
       Add Project
     </button>
@@ -54,7 +121,7 @@
     <div class="flex justify-between items-center mb-4">
       <div class="flex items-center gap-3">
         <h3 class="text-[18px] font-semibold text-[#0B182A]">All Projects</h3>
-        <span class="text-[12px] text-gray-500 bg-gray-100 px-3 py-1 rounded-full">48 Total</span>
+        <span class="text-[12px] text-gray-500 bg-gray-100 px-3 py-1 rounded-full">{projects.length} Total</span>
       </div>
       <div class="flex gap-2">
         <!-- View Toggle -->
@@ -112,7 +179,11 @@
                     <button aria-label="View project" class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-[#0B182A] hover:bg-gray-100 transition-colors">
                       <Icons.Eye size={16} />
                     </button>
-                    <button aria-label="Edit project" class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-[#0B182A] hover:bg-gray-100 transition-colors">
+                    <button
+                      aria-label="Edit project"
+                      onclick={() => openEdit(p)}
+                      class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-[#0B182A] hover:bg-gray-100 transition-colors"
+                    >
                       <Icons.Edit size={16} />
                     </button>
                   </div>
@@ -134,10 +205,19 @@
                 <h4 class="text-[16px] font-semibold text-gray-800">{p.name}</h4>
                 <p class="text-[12px] text-[#E87D1F] font-medium mt-0.5">{p.id}</p>
               </div>
-              <span class="flex items-center gap-1 text-[11px] text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full whitespace-nowrap shrink-0">
-                <Icons.MapPin size={10} />
-                {p.location}
-              </span>
+              <div class="flex items-center gap-1.5 shrink-0">
+                <span class="flex items-center gap-1 text-[11px] text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full whitespace-nowrap">
+                  <Icons.MapPin size={10} />
+                  {p.location}
+                </span>
+                <button
+                  aria-label="Edit project"
+                  onclick={() => openEdit(p)}
+                  class="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-[#0B182A] hover:bg-gray-100 transition-colors"
+                >
+                  <Icons.Edit size={13} />
+                </button>
+              </div>
             </div>
             <div class="flex flex-wrap gap-1.5 mt-3">
               <span class="text-[11px] px-2.5 py-1 rounded-full bg-blue-50 text-blue-600 font-medium">{p.customer}</span>
@@ -172,7 +252,7 @@
 
     <!-- Pagination -->
     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between pt-4 border-t border-gray-100 mt-4 gap-3">
-      <span class="text-[13px] text-gray-500">Showing <strong>1–9</strong> of 48 Projects</span>
+      <span class="text-[13px] text-gray-500">Showing <strong>1–{projects.length}</strong> of {projects.length} Projects</span>
       <div class="flex items-center gap-1">
         {#each ["< Previous", "1", "2", "3", "...", "48", "Next >"] as page}
           <button
@@ -185,3 +265,12 @@
     </div>
   </div>
 </div>
+
+{#if showForm}
+  <ProjectForm
+    mode={formMode}
+    data={editData}
+    onSave={handleSave}
+    onClose={() => (showForm = false)}
+  />
+{/if}
