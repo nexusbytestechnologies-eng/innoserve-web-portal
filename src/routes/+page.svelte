@@ -34,7 +34,7 @@
 <div
   class="fixed inset-0 flex items-center justify-center
          bg-[linear-gradient(145deg,#0d2a3d_0%,#183E58_35%,#1a4565_65%,#0f2d42_100%)]
-         font-[Poppins] overflow-hidden z-9999
+           overflow-hidden z-9999
          transition-[opacity,transform] duration-600 ease-in-out"
   class:opacity-0={fadeOut}
   class:scale-105={fadeOut}
@@ -124,7 +124,7 @@
           />
           <path
             d="M14 26L26 14L38 26L26 38L14 26Z"
-            fill="#183E58"
+            fill="#0B182A"
             class="logo-diamond"
           />
           <path
@@ -210,8 +210,6 @@
 </div>
 
 <style>
-  @import url("https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap");
-
   @keyframes float {
     0%,
     100% {

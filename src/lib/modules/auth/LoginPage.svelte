@@ -64,7 +64,7 @@
       </div>
 
       <h2
-        class="text-center text-[22px] font-bold text-[#183e58] mb-9 tracking-[1px]"
+        class="text-center text-[22px] font-bold text-[#0B182A] mb-9 tracking-[1px]"
       >
         LOGIN
       </h2>
@@ -75,7 +75,7 @@
             type="email"
             placeholder="E-mail"
             bind:value={email}
-            class="w-full py-3.5 px-4.5 bg-[#ededed] border-none rounded-lg text-sm text-[#333] outline-none transition-all duration-200 placeholder:text-[#999] focus:bg-[#e3e3e3] focus:shadow-[0_0_0_2px_rgba(24,62,88,0.15)] font-[Poppins]"
+            class="w-full py-3.5 px-4.5 bg-[#ededed] border-none rounded-lg text-sm text-[#333] outline-none transition-all duration-200 placeholder:text-[#999] focus:bg-[#e3e3e3] focus:shadow-[0_0_0_2px_rgba(24,62,88,0.15)]"
           />
         </div>
 
@@ -84,7 +84,7 @@
             type="password"
             placeholder="Password"
             bind:value={password}
-            class="w-full py-3.5 px-4.5 bg-[#ededed] border-none rounded-lg text-sm text-[#333] outline-none transition-all duration-200 placeholder:text-[#999] focus:bg-[#e3e3e3] focus:shadow-[0_0_0_2px_rgba(24,62,88,0.15)] font-[Poppins]"
+            class="w-full py-3.5 px-4.5 bg-[#ededed] border-none rounded-lg text-sm text-[#333] outline-none transition-all duration-200 placeholder:text-[#999] focus:bg-[#e3e3e3] focus:shadow-[0_0_0_2px_rgba(24,62,88,0.15)]"
           />
         </div>
 
@@ -95,7 +95,7 @@
             <input
               type="checkbox"
               bind:checked={rememberMe}
-              class="w-4 h-4 border-2 border-[#ccc] rounded-[3px] accent-[#183e58]"
+              class="w-4 h-4 border-2 border-[#ccc] rounded-[3px] accent-[#0B182A]"
             />
             <span>Remember me</span>
           </label>
@@ -110,7 +110,7 @@
         <button
           onclick={handleLogin}
           disabled={loading}
-          class="w-full py-3.5 mt-2 bg-[#183e58] hover:bg-[#1e4d6e] text-white border-none rounded-lg text-[15px] font-semibold tracking-[1px] cursor-pointer transition-colors duration-200 font-[Poppins]"
+          class="w-full py-3.5 mt-2 bg-[linear-gradient(to_bottom,#0B182A,#021E44)] hover:opacity-90 text-white border-none rounded-lg text-[15px] font-semibold tracking-[1px] cursor-pointer transition-opacity duration-150"
         >
           LOGIN
         </button>
