@@ -1,6 +1,6 @@
 import { json } from "@sveltejs/kit";
 import nodemailer from "nodemailer";
-import { GMAIL_USER, GMAIL_APP_PASSWORD } from "$env/static/private";
+import { GMAIL_USER, GMAIL_APP_PASSWORD } from "$env/dynamic/private";
 import { saveOtp } from "$lib/server/otp-store";
 
 function generateOtp(): string {
