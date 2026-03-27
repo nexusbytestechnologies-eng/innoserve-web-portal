@@ -9,18 +9,18 @@
 # Set PUBLIC_API_URL as a Netlify env var to your Railway domain.
 [[redirects]]
   from = "/graphql"
-  to = ":PUBLIC_API_URL/graphql"
+  to = "https://innoserve-web-api-production.up.railway.app/graphql"
   status = 200
   force = true
 
 [[redirects]]
   from = "/upload"
-  to = ":PUBLIC_API_URL/upload"
+  to = "https://innoserve-web-api-production.up.railway.app/upload"
   status = 200
   force = true
 
 [[redirects]]
   from = "/file/*"
-  to = ":PUBLIC_API_URL/file/:splat"
+  to = "https://innoserve-web-api-production.up.railway.app/file/:splat"
   status = 200
   force = true
