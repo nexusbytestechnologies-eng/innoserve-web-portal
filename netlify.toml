@@ -4,3 +4,23 @@
 
 [build.environment]
   NODE_VERSION = "20"
+
+# Proxy API requests to the backend (Railway).
+# Set PUBLIC_API_URL as a Netlify env var to your Railway domain.
+[[redirects]]
+  from = "/graphql"
+  to = ":PUBLIC_API_URL/graphql"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/upload"
+  to = ":PUBLIC_API_URL/upload"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/file/*"
+  to = ":PUBLIC_API_URL/file/:splat"
+  status = 200
+  force = true

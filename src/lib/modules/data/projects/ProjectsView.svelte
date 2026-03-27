@@ -1,6 +1,8 @@
 <script lang="ts">
   import * as Icons from "$lib/icons";
   import ProjectForm from "./ProjectForm.svelte";
+  import { createProject } from "./api";
+  import { toast } from "svelte-sonner";
 
   type Project = {
     id: string;
@@ -44,23 +46,36 @@
     showForm = true;
   }
 
-  function handleSave(form: Record<string, unknown>) {
+  async function handleSave(form: Record<string, unknown>) {
     if (formMode === "add") {
-      const newId = `PRJ${String(projects.length + 1).padStart(3, "0")}`;
-      projects = [
-        ...projects,
-        {
-          id: newId,
+      try {
+        // customerId is not yet captured in the form; passing empty string until
+        // the form is extended with a customer ID lookup/dropdown.
+        const created = await createProject({
+          customerId: "",
           name: form.name as string,
-          customer: form.customer as string,
-          location: form.location as string,
-          sla: form.sla as string,
-          status: form.status as string,
-          tags: form.tags as string[],
-          tickets: 0,
-          completed: 0,
-        },
-      ];
+          author: "system",
+        });
+        const newId = created.id;
+        projects = [
+          ...projects,
+          {
+            id: newId,
+            name: form.name as string,
+            customer: form.customer as string,
+            location: form.location as string,
+            sla: form.sla as string,
+            status: form.status as string,
+            tags: form.tags as string[],
+            tickets: 0,
+            completed: 0,
+          },
+        ];
+        toast.success("Project created successfully");
+      } catch (err) {
+        toast.error(`Failed to create project: ${(err as Error).message}`);
+        return;
+      }
     } else if (editData) {
       projects = projects.map((p) =>
         p.id === editData!.id
