@@ -1,5 +1,3 @@
-import { PUBLIC_GQL_ENDPOINT } from "$env/static/public";
-
 interface GqlResponse<T> {
   data: T;
   errors?: Array<{ message: string }>;
@@ -9,7 +7,7 @@ export async function gqlRequest<T>(
   query: string,
   variables?: Record<string, unknown>,
 ): Promise<T> {
-  const res = await fetch(PUBLIC_GQL_ENDPOINT, {
+  const res = await fetch("/graphql", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ query, variables }),
