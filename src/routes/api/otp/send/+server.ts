@@ -1,6 +1,6 @@
 import { json } from "@sveltejs/kit";
 import nodemailer from "nodemailer";
-import { GMAIL_USER, GMAIL_APP_PASSWORD } from "$env/static/private";
+import { env } from "$env/dynamic/private";
 import { saveOtp } from "$lib/server/otp-store";
 
 function generateOtp(): string {
@@ -19,11 +19,11 @@ export async function POST({ request }) {
 
   const transporter = nodemailer.createTransport({
     service: "gmail",
-    auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD },
+    auth: { user: env.GMAIL_USER, pass: env.GMAIL_APP_PASSWORD },
   });
 
   await transporter.sendMail({
-    from: `"Innoserve" <${GMAIL_USER}>`,
+    from: `"Innoserve" <${env.GMAIL_USER}>`,
     to: email,
     subject: "Your Verification Code",
     html: `
