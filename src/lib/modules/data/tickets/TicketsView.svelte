@@ -1,6 +1,8 @@
 <script lang="ts">
   import * as Icons from "$lib/icons";
   import TicketForm from "./TicketForm.svelte";
+  import { createTicket } from "./api";
+  import { toast } from "svelte-sonner";
 
   type Ticket = {
     id: string;
@@ -42,10 +44,25 @@
     showForm = true;
   }
 
-  function handleSave(form: Record<string, string>) {
+  async function handleSave(form: Record<string, string>) {
     if (formMode === "add") {
-      const newId = `TKT${String(tickets.length + 1).padStart(3, "0")}`;
-      tickets = [...tickets, { id: newId, ...form } as Ticket];
+      try {
+        // projectId, categoryId, assignedEngineerId are IDs not yet collected in the
+        // current form (form stores names/labels). These fields will be wired once
+        // the form is extended with proper lookup dropdowns.
+        const created = await createTicket({
+          title: form.issue,
+          status: form.status,
+          priority: form.priority,
+          state: form.place,
+          author: "system",
+        });
+        tickets = [...tickets, { id: created.id, ...form } as Ticket];
+        toast.success("Ticket created successfully");
+      } catch (err) {
+        toast.error(`Failed to create ticket: ${(err as Error).message}`);
+        return;
+      }
     } else if (editData) {
       tickets = tickets.map((t) => (t.id === editData!.id ? { ...t, ...form } : t));
     }

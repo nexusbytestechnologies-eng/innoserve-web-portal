@@ -1,32 +1,88 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import * as Icons from "$lib/icons";
   import CustomerForm from "./CustomerForm.svelte";
-
-  type Customer = {
-    id: string;
-    company: string;
-    contact: string;
-    phone: string;
-    location: string;
-    tickets: number;
-    status: string;
-  };
+  import { fetchCustomers, createCustomer, updateCustomerStatus, type Customer } from "./api";
+  import { toast } from "svelte-sonner";
+  import ConfirmModal from "$lib/components/ConfirmModal.svelte";
 
   const customerStats = [
-    { label: "Total Customers", value: "240", trend: "+10%", trendDir: "up", icon: "users", color: "#0B182A" },
-    { label: "Active Customers", value: "198", trend: "+8%", trendDir: "up", icon: "active", color: "#22c55e" },
-    { label: "Inactive Customers", value: "42", trend: "+5%", trendDir: "up", icon: "inactive", color: "#ef4444" },
-    { label: "Open Tickets", value: "1,250", trend: "+11%", trendDir: "up", icon: "tickets", color: "#E87D1F" },
+    { label: "Total Customers", value: "0", icon: "users", color: "#0B182A" },
+    { label: "Active Customers", value: "0", icon: "active", color: "#22c55e" },
+    { label: "Pending Approval", value: "0", icon: "inactive", color: "#E87D1F" },
+    { label: "Open Tickets", value: "—", icon: "tickets", color: "#6366f1" },
   ];
 
-  let customers = $state<Customer[]>([
-    { id: "CUS001", company: "HDFC Bank", contact: "Arun", phone: "+91 9999999999", location: "Kerala", tickets: 12, status: "Active" },
-    { id: "CUS002", company: "SBI Bank", contact: "Anandhu", phone: "+91 9999999999", location: "Tamil Nadu", tickets: 8, status: "Inactive" },
-    { id: "CUS003", company: "ICICI Bank", contact: "Akshay", phone: "+91 9999999999", location: "Delhi", tickets: 0, status: "Active" },
-    { id: "CUS004", company: "Axis Bank", contact: "Jabbar", phone: "+91 9999999999", location: "Maharashtra", tickets: 15, status: "Inactive" },
-    { id: "CUS005", company: "Kotak Bank", contact: "John", phone: "+91 9999999999", location: "Karnataka", tickets: 5, status: "Active" },
-    { id: "CUS006", company: "Canara Bank", contact: "Shruthi", phone: "+91 9999999999", location: "Telangana", tickets: 3, status: "Active" },
-  ]);
+  let customers = $state<Customer[]>([]);
+  let loading = $state(true);
+
+  onMount(async () => {
+    try {
+      customers = await fetchCustomers();
+      customerStats[0].value = String(customers.length);
+      customerStats[1].value = String(customers.filter(c => c.status === "active").length);
+      customerStats[2].value = String(customers.filter(c => c.status === "pending_approval").length);
+    } catch (err) {
+      toast.error("Failed to load customers");
+    } finally {
+      loading = false;
+    }
+  });
+
+  // Confirmation modal state
+  let confirmModal = $state<{
+    title: string;
+    message: string;
+    confirmLabel: string;
+    confirmClass: string;
+    action: () => Promise<void>;
+  } | null>(null);
+
+  function promptApprove(customer: Customer) {
+    confirmModal = {
+      title: "Approve Customer",
+      message: `Approve ${customer.companyName}? Login credentials will be sent to their email.`,
+      confirmLabel: "Approve",
+      confirmClass: "bg-green-600 text-white hover:bg-green-700",
+      action: async () => {
+        const updated = await updateCustomerStatus({ id: customer.id, status: "active", approvedBy: "admin" });
+        customers = customers.map(c => c.id === updated.id ? { ...c, ...updated } : c);
+        toast.success(`${customer.companyName} approved — credentials sent`);
+      },
+    };
+  }
+
+  function promptReject(customer: Customer) {
+    confirmModal = {
+      title: "Reject Customer",
+      message: `Reject ${customer.companyName}? This cannot be undone.`,
+      confirmLabel: "Reject",
+      confirmClass: "bg-red-500 text-white hover:bg-red-600",
+      action: async () => {
+        const updated = await updateCustomerStatus({ id: customer.id, status: "rejected" });
+        customers = customers.map(c => c.id === updated.id ? { ...c, ...updated } : c);
+        toast.success(`${customer.companyName} rejected`);
+      },
+    };
+  }
+
+  async function handleConfirm() {
+    if (!confirmModal) return;
+    const action = confirmModal.action;
+    confirmModal = null;
+    try {
+      await action();
+    } catch (err) {
+      toast.error((err as Error).message);
+    }
+  }
+
+  function statusStyle(status: string) {
+    if (status === "active") return "bg-green-50 text-green-600";
+    if (status === "pending_approval") return "bg-amber-50 text-amber-600";
+    if (status === "rejected") return "bg-red-50 text-red-500";
+    return "bg-gray-100 text-gray-500";
+  }
 
   let showForm = $state(false);
   let formMode = $state<"add" | "edit">("add");
@@ -38,20 +94,22 @@
     showForm = true;
   }
 
-  function openEdit(customer: Customer) {
-    formMode = "edit";
-    editData = { ...customer };
-    showForm = true;
-  }
-
-  function handleSave(form: Record<string, string>) {
+  async function handleSave(form: Record<string, string>) {
     if (formMode === "add") {
-      const newId = `CUS${String(customers.length + 1).padStart(3, "0")}`;
-      customers = [...customers, { id: newId, tickets: 0, ...form } as Customer];
-    } else if (editData) {
-      customers = customers.map((c) =>
-        c.id === editData!.id ? { ...c, ...form } : c
-      );
+      try {
+        const created = await createCustomer({
+          companyName: form.company,
+          contactPersonName: form.contact,
+          phone: form.phone,
+          addressState: form.location,
+          author: "admin",
+        });
+        customers = [...customers, created];
+        toast.success("Customer created successfully");
+      } catch (err) {
+        toast.error(`Failed to create customer: ${(err as Error).message}`);
+        return;
+      }
     }
     showForm = false;
   }
@@ -64,9 +122,7 @@
       <div class="bg-white rounded-2xl shadow border border-amber-50 relative overflow-hidden
                   flex items-center gap-4 px-4 py-3.5
                   md:flex-col md:items-start md:gap-1 md:p-5">
-        <!-- Coloured accent strip — mobile only -->
         <div class="absolute top-0 left-0 bottom-0 w-1 md:hidden" style="background-color: {stat.color};"></div>
-        <!-- Icon -->
         <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 md:mb-1"
              style="background-color: {stat.color}15;">
           {#if stat.icon === "users"}
@@ -79,17 +135,10 @@
             <Icons.TicketCard size={20} stroke={stat.color} />
           {/if}
         </div>
-        <!-- Value + label -->
         <div class="flex-1 min-w-0 md:flex-none">
           <div class="text-[21px] md:text-[22px] font-bold text-[#0B182A] leading-tight">{stat.value}</div>
           <div class="text-[12px] md:text-[13px] text-gray-400">{stat.label}</div>
         </div>
-        <!-- Trend badge — inline on mobile, absolute on desktop -->
-        <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full shrink-0
-                     md:absolute md:top-4 md:right-4
-                     {stat.trendDir === 'up' ? 'text-green-600 bg-green-50' : 'text-red-500 bg-red-50'}">
-          {stat.trend}
-        </span>
       </div>
     {/each}
   </div>
@@ -145,41 +194,52 @@
       <table class="w-full text-sm border-collapse">
         <thead>
           <tr class="border-b border-gray-100">
-            {#each ["CUSTOMER ID", "COMPANY NAME", "CONTACT PERSON", "PHONE", "LOCATION", "ACTIVE TICKETS", "STATUS", "ACTIONS"] as col}
+            {#each ["COMPANY", "CONTACT PERSON", "EMAIL", "PHONE", "LOCATION", "STATUS", "ACTIONS"] as col}
               <th class="text-left text-[11px] font-semibold text-gray-400 tracking-wide py-3 px-3 whitespace-nowrap">{col}</th>
             {/each}
           </tr>
         </thead>
         <tbody>
-          {#each customers as c}
-            <tr class="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-              <td class="py-3 px-3 text-[#E87D1F] font-medium text-[13px]">{c.id}</td>
-              <td class="py-3 px-3 text-[13px] text-gray-700">{c.company}</td>
-              <td class="py-3 px-3 text-[13px] text-gray-600">{c.contact}</td>
-              <td class="py-3 px-3 text-[13px] text-gray-600">{c.phone}</td>
-              <td class="py-3 px-3 text-[13px] text-gray-600">{c.location}</td>
-              <td class="py-3 px-3 text-[13px] text-gray-600">{c.tickets}</td>
-              <td class="py-3 px-3">
-                <span class="text-[11px] font-semibold px-2.5 py-1 rounded-full {c.status === 'Active' ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-500'}">
-                  {c.status}
-                </span>
-              </td>
-              <td class="py-3 px-3">
-                <div class="flex gap-1">
-                  <button aria-label="View customer details" class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-[#0B182A] hover:bg-gray-100 transition-colors">
-                    <Icons.Eye size={16} />
-                  </button>
-                  <button
-                    aria-label="Edit customer"
-                    onclick={() => openEdit(c)}
-                    class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-[#0B182A] hover:bg-gray-100 transition-colors"
-                  >
-                    <Icons.Edit size={16} />
-                  </button>
-                </div>
-              </td>
-            </tr>
-          {/each}
+          {#if loading}
+            <tr><td colspan="7" class="py-10 text-center text-[13px] text-gray-400">Loading…</td></tr>
+          {:else if customers.length === 0}
+            <tr><td colspan="7" class="py-10 text-center text-[13px] text-gray-400">No customers yet</td></tr>
+          {:else}
+            {#each customers as c}
+              <tr class="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                <td class="py-3 px-3 text-[#E87D1F] font-medium text-[13px]">{c.companyName}</td>
+                <td class="py-3 px-3 text-[13px] text-gray-700">{c.contactPersonName}</td>
+                <td class="py-3 px-3 text-[13px] text-gray-600">{c.email}</td>
+                <td class="py-3 px-3 text-[13px] text-gray-600">{c.phone}</td>
+                <td class="py-3 px-3 text-[13px] text-gray-600">{c.addressState ?? "—"}</td>
+                <td class="py-3 px-3">
+                  <span class="text-[11px] font-semibold px-2.5 py-1 rounded-full {statusStyle(c.status)}">
+                    {c.status}
+                  </span>
+                </td>
+                <td class="py-3 px-3">
+                  <div class="flex gap-1">
+                    {#if c.status === "pending_approval"}
+                      <button
+                        aria-label="Approve customer"
+                        onclick={() => promptApprove(c)}
+                        class="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-green-50 text-green-600 hover:bg-green-100 transition-colors cursor-pointer"
+                      >Approve</button>
+                      <button
+                        aria-label="Reject customer"
+                        onclick={() => promptReject(c)}
+                        class="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition-colors cursor-pointer"
+                      >Reject</button>
+                    {:else}
+                      <button aria-label="View customer" class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-[#0B182A] hover:bg-gray-100 transition-colors">
+                        <Icons.Eye size={16} />
+                      </button>
+                    {/if}
+                  </div>
+                </td>
+              </tr>
+            {/each}
+          {/if}
         </tbody>
       </table>
     </div>
@@ -205,5 +265,16 @@
     data={editData}
     onSave={handleSave}
     onClose={() => (showForm = false)}
+  />
+{/if}
+
+{#if confirmModal}
+  <ConfirmModal
+    title={confirmModal.title}
+    message={confirmModal.message}
+    confirmLabel={confirmModal.confirmLabel}
+    confirmClass={confirmModal.confirmClass}
+    onConfirm={handleConfirm}
+    onCancel={() => (confirmModal = null)}
   />
 {/if}

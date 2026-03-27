@@ -1,0 +1,1256 @@
+<script lang="ts">
+  import { toast } from "svelte-sonner";
+  import { submitEngineerOnboarding } from "./engineer-api";
+  import PhoneOtpVerifier from "./PhoneOtpVerifier.svelte";
+
+  const STEPS = [
+    { title: "Basic Details", subtitle: "Personal information & address" },
+    { title: "KYC Documents", subtitle: "Identity verification" },
+    { title: "Bank Details", subtitle: "Payment information" },
+    { title: "Review & Submit", subtitle: "Confirm and submit" },
+  ];
+
+  const INDIAN_STATES = [
+    "Andhra Pradesh",
+    "Arunachal Pradesh",
+    "Assam",
+    "Bihar",
+    "Chhattisgarh",
+    "Goa",
+    "Gujarat",
+    "Haryana",
+    "Himachal Pradesh",
+    "Jharkhand",
+    "Karnataka",
+    "Kerala",
+    "Madhya Pradesh",
+    "Maharashtra",
+    "Manipur",
+    "Meghalaya",
+    "Mizoram",
+    "Nagaland",
+    "Odisha",
+    "Punjab",
+    "Rajasthan",
+    "Sikkim",
+    "Tamil Nadu",
+    "Telangana",
+    "Tripura",
+    "Uttar Pradesh",
+    "Uttarakhand",
+    "West Bengal",
+    "Delhi (NCT)",
+    "Chandigarh",
+    "Puducherry",
+    "Ladakh",
+    "Jammu & Kashmir",
+    "Lakshadweep",
+    "Dadra & Nagar Haveli and Daman & Diu",
+    "Andaman & Nicobar Islands",
+  ];
+
+  let currentStep = $state(0);
+  let isSubmitted = $state(false);
+  let isSubmitting = $state(false);
+  let referenceId = $state("");
+  let termsAccepted = $state(false);
+  // Phone is verified before the form wizard is shown
+  let phoneGateCleared = $state(false);
+
+  let form = $state({
+    fullName: "",
+    phone: "",
+    email: "",
+    state: "",
+    city: "",
+    pincode: "",
+    profilePhoto: null as File | null,
+    profilePhotoPreview: "",
+    aadhaarFile: null as File | null,
+    panFile: null as File | null,
+    dlFile: null as File | null,
+    accountHolderName: "",
+    accountNumber: "",
+    confirmAccountNumber: "",
+    ifsc: "",
+    cancelChequeFile: null as File | null,
+  });
+
+  let errors = $state<Record<string, string>>({});
+
+  function validateStep(step: number): boolean {
+    errors = {};
+    switch (step) {
+      case 0:
+        if (!form.fullName.trim()) errors.fullName = "Full name is required";
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email))
+          errors.email = "Enter valid email address";
+        if (!form.state) errors.state = "Please select your state";
+        if (!form.city.trim()) errors.city = "City is required";
+        if (!/^\d{6}$/.test(form.pincode))
+          errors.pincode = "Enter valid 6-digit pincode";
+        break;
+      case 1:
+        if (!form.aadhaarFile)
+          errors.aadhaarFile = "Aadhaar card upload is required";
+        if (!form.panFile) errors.panFile = "PAN card upload is required";
+        if (!form.dlFile) errors.dlFile = "Driving license upload is required";
+        break;
+      case 2:
+        if (!form.accountHolderName.trim())
+          errors.accountHolderName = "Account holder name is required";
+        if (!/^\d{9,18}$/.test(form.accountNumber))
+          errors.accountNumber = "Enter valid account number (9–18 digits)";
+        if (form.accountNumber !== form.confirmAccountNumber)
+          errors.confirmAccountNumber = "Account numbers do not match";
+        if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(form.ifsc))
+          errors.ifsc = "Enter valid IFSC code (e.g., SBIN0001234)";
+        if (!form.cancelChequeFile)
+          errors.cancelChequeFile =
+            "Cancelled cheque or passbook scan is required";
+        break;
+    }
+    return Object.keys(errors).length === 0;
+  }
+
+  function nextStep() {
+    if (validateStep(currentStep)) {
+      currentStep = Math.min(currentStep + 1, STEPS.length - 1);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }
+
+  function prevStep() {
+    currentStep = Math.max(currentStep - 1, 0);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function handleSubmit() {
+    isSubmitting = true;
+    try {
+      const result = await submitEngineerOnboarding({
+        fullName: form.fullName,
+        phone: form.phone,
+        email: form.email,
+        state: form.state,
+        city: form.city,
+        pincode: form.pincode,
+        profilePhoto: form.profilePhoto ?? undefined,
+        aadhaarFile: form.aadhaarFile!,
+        panFile: form.panFile!,
+        dlFile: form.dlFile!,
+        accountHolderName: form.accountHolderName,
+        accountNumber: form.accountNumber,
+        ifsc: form.ifsc,
+        cancelChequeFile: form.cancelChequeFile!,
+      });
+      referenceId = result.referenceId;
+      isSubmitted = true;
+      toast.success("Application submitted successfully!");
+    } catch (err) {
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Submission failed. Please try again.",
+      );
+    } finally {
+      isSubmitting = false;
+    }
+  }
+
+  const inputClass =
+    "w-full px-3.5 py-2.5 border border-gray-200 rounded-lg text-[13px] text-gray-700 outline-none focus:border-[#0B182A] transition-colors bg-white";
+  const labelTextClass =
+    "text-[11px] font-semibold text-gray-500 uppercase tracking-wide";
+  const errorClass = "text-[11px] text-red-500 mt-1";
+  const selectClass =
+    "w-full px-3.5 py-2.5 border border-gray-200 rounded-lg text-[13px] text-gray-700 outline-none focus:border-[#0B182A] transition-colors bg-white";
+</script>
+
+<div class="min-h-screen bg-stone-100 py-8 px-4">
+  <!-- Header -->
+  <div class="text-center mb-8">
+    <div class="inline-flex items-center gap-2.5 mb-4">
+      <div
+        class="w-9 h-9 rounded-lg flex items-center justify-center"
+        style="background-color:#E87D1F"
+      >
+        <svg
+          class="w-5 h-5 text-white"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+          />
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+          />
+        </svg>
+      </div>
+      <span class="text-[#0B182A] text-lg font-bold tracking-tight">InnoServe</span>
+    </div>
+    <h1 class="text-2xl md:text-3xl font-bold text-[#0B182A] mb-1.5">
+      Engineer Onboarding
+    </h1>
+    <p class="text-gray-600 text-[13px]">
+      Complete the form below to register as a field engineer
+    </p>
+  </div>
+
+  {#if isSubmitted}
+    <!-- Success State -->
+    <div class="max-w-xl mx-auto">
+      <div class="bg-white rounded-2xl shadow-2xl p-8 text-center">
+        <div
+          class="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5"
+          style="background-color:#dcfce7"
+        >
+          <svg
+            class="w-8 h-8 text-green-500"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2.5"
+              d="M5 13l4 4L19 7"
+            />
+          </svg>
+        </div>
+        <h2 class="text-xl font-bold text-gray-900 mb-2">
+          Application Submitted!
+        </h2>
+        <p class="text-gray-500 text-[13px] mb-6">
+          Thank you, <strong>{form.fullName}</strong>. Your onboarding
+          application has been received and is pending review.
+        </p>
+        <div class="bg-gray-50 rounded-xl p-4 mb-6">
+          <p class="text-[11px] text-gray-500 uppercase tracking-wide mb-1">
+            Reference ID
+          </p>
+          <p class="text-base font-bold text-[#0B182A] font-mono">
+            {referenceId}
+          </p>
+          <p class="text-[11px] text-gray-400 mt-1">
+            Save this for tracking your application
+          </p>
+        </div>
+        <div class="text-left bg-blue-50 rounded-xl p-4 space-y-3">
+          <p
+            class="text-[11px] font-semibold text-gray-700 uppercase tracking-wide"
+          >
+            What happens next?
+          </p>
+          {#each ["Your documents will be reviewed within 2–3 business days", `Login credentials will be sent to ${form.email}`, "You'll receive a confirmation email once your account is activated"] as step, i}
+            <div class="flex items-start gap-3">
+              <span
+                class="w-5 h-5 rounded-full text-white text-[11px] flex items-center justify-center flex-shrink-0 mt-0.5 font-semibold"
+                style="background-color:#E87D1F">{i + 1}</span
+              >
+              <p class="text-[13px] text-gray-600">{step}</p>
+            </div>
+          {/each}
+        </div>
+      </div>
+    </div>
+  {:else if !phoneGateCleared}
+    <!-- ── Phone Verification Gate ── -->
+    <PhoneOtpVerifier
+      onVerified={(email) => {
+        form.email = email;
+        phoneGateCleared = true;
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }}
+    />
+    <p class="text-center text-[11px] text-gray-500 mt-6 pb-4">
+      Having trouble? Contact support at <span class="text-gray-600"
+        >support@innoserve.in</span
+      >
+    </p>
+  {:else}
+    <div class="max-w-3xl mx-auto">
+      <!-- Step Progress -->
+      <div class="bg-white shadow-sm border border-gray-200 rounded-2xl p-4 mb-5">
+        <div class="flex items-center">
+          {#each STEPS as step, i}
+            <div
+              class="flex items-center {i < STEPS.length - 1 ? 'flex-1' : ''}"
+            >
+              <div class="flex flex-col items-center">
+                <div
+                  class="w-8 h-8 rounded-full flex items-center justify-center font-semibold text-[13px] flex-shrink-0 transition-colors"
+                  class:bg-green-500={i < currentStep}
+                  class:text-white={i <= currentStep}
+                  style={i === currentStep
+                    ? "background-color:#E87D1F"
+                    : i < currentStep
+                      ? ""
+                      : "background-color:#e5e7eb"}
+                >
+                  {#if i < currentStep}
+                    <svg
+                      class="w-4 h-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2.5"
+                        d="M5 13l4 4L19 7"
+                      />
+                    </svg>
+                  {:else}
+                    <span class={i > currentStep ? "text-gray-400" : ""}
+                      >{i + 1}</span
+                    >
+                  {/if}
+                </div>
+                <span
+                  class="text-[10px] mt-1 hidden md:block whitespace-nowrap font-medium"
+                  style={i === currentStep
+                    ? "color:#E87D1F"
+                    : i < currentStep
+                      ? "color:#16a34a"
+                      : "color:#9ca3af"}>{step.title}</span
+                >
+              </div>
+              {#if i < STEPS.length - 1}
+                <div
+                  class="flex-1 h-px mx-2"
+                  style={i < currentStep
+                    ? "background-color:#16a34a"
+                    : "background-color:#e5e7eb"}
+                ></div>
+              {/if}
+            </div>
+          {/each}
+        </div>
+        <div class="mt-2.5 md:hidden text-center">
+          <span class="text-[13px] font-medium" style="color:#E87D1F"
+            >{STEPS[currentStep].title}</span
+          >
+          <span class="text-gray-500 text-[13px]">
+            · Step {currentStep + 1} of {STEPS.length}</span
+          >
+        </div>
+      </div>
+
+      <!-- Form Card -->
+      <div class="bg-white rounded-2xl shadow-2xl overflow-hidden">
+        <!-- Card Header -->
+        <div class="bg-[linear-gradient(to_right,#0B182A,#021E44)] px-6 py-4">
+          <h2 class="text-[15px] font-semibold text-white">
+            {STEPS[currentStep].title}
+          </h2>
+          <p class="text-gray-400 text-[12px] mt-0.5">
+            {STEPS[currentStep].subtitle}
+          </p>
+        </div>
+
+        <div class="p-6 md:p-8">
+          <!-- ── Step 0: Basic Details ── -->
+          {#if currentStep === 0}
+            <div class="flex flex-col gap-5">
+              <!-- Profile Photo -->
+              <div
+                class="flex flex-col items-center gap-3 pb-5 border-b border-gray-100"
+              >
+                <div
+                  class="w-20 h-20 rounded-full bg-gray-100 overflow-hidden flex items-center justify-center border-2 border-dashed border-gray-300"
+                >
+                  {#if form.profilePhotoPreview}
+                    <img
+                      src={form.profilePhotoPreview}
+                      alt="Profile preview"
+                      class="w-full h-full object-cover"
+                    />
+                  {:else}
+                    <svg
+                      class="w-9 h-9 text-gray-300"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="1.5"
+                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                      />
+                    </svg>
+                  {/if}
+                </div>
+                <div class="text-center">
+                  <label
+                    for="profilePhotoInput"
+                    class="cursor-pointer inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-gray-200 text-[12px] text-gray-600 hover:bg-gray-50 transition-colors"
+                  >
+                    <svg
+                      class="w-3.5 h-3.5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+                      />
+                    </svg>
+                    {form.profilePhoto
+                      ? "Change Photo"
+                      : "Upload Profile Photo"}
+                  </label>
+                  <input
+                    type="file"
+                    id="profilePhotoInput"
+                    class="hidden"
+                    accept="image/*"
+                    onchange={(e) => {
+                      const f =
+                        (e.target as HTMLInputElement).files?.[0] ?? null;
+                      form.profilePhoto = f;
+                      if (f) {
+                        const reader = new FileReader();
+                        reader.onload = (ev) => {
+                          form.profilePhotoPreview = ev.target
+                            ?.result as string;
+                        };
+                        reader.readAsDataURL(f);
+                      } else {
+                        form.profilePhotoPreview = "";
+                      }
+                    }}
+                  />
+                  <p class="text-[11px] text-gray-400 mt-1">
+                    Optional · JPG, PNG up to 2MB
+                  </p>
+                </div>
+              </div>
+
+              <!-- Name & Phone -->
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <label class="flex flex-col gap-1.5">
+                  <span class={labelTextClass}
+                    >Full Name <span class="text-red-400">*</span></span
+                  >
+                  <input
+                    type="text"
+                    bind:value={form.fullName}
+                    class="{inputClass} {errors.fullName
+                      ? 'border-red-300'
+                      : ''}"
+                    placeholder="Enter your full name"
+                  />
+                  {#if errors.fullName}<span class={errorClass}
+                      >{errors.fullName}</span
+                    >{/if}
+                </label>
+                <label class="flex flex-col gap-1.5">
+                  <span class={labelTextClass}>Phone Number</span>
+                  <div class="relative">
+                    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-[13px] font-medium select-none">+91</span>
+                    <input
+                      type="tel"
+                      bind:value={form.phone}
+                      class="{inputClass} {errors.phone ? 'border-red-300' : ''} pl-11"
+                      placeholder="9876543210"
+                      maxlength="10"
+                    />
+                  </div>
+                  {#if errors.phone}<span class={errorClass}>{errors.phone}</span>{/if}
+                </label>
+              </div>
+
+              <!-- Email -->
+              <div class="flex flex-col gap-1.5">
+                <span class={labelTextClass}>Email ID</span>
+                <div class="flex items-center gap-2.5 px-3.5 py-2.5 border border-green-200 bg-green-50 rounded-lg">
+                  <svg class="w-4 h-4 text-green-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+                  </svg>
+                  <span class="text-[13px] font-medium text-green-800">{form.email}</span>
+                  <span class="ml-auto text-[11px] font-semibold text-green-600 bg-green-100 px-2 py-0.5 rounded-full">Verified</span>
+                </div>
+              </div>
+
+              <!-- Address -->
+              <div>
+                <p class="{labelTextClass} mb-2.5">
+                  Address
+                  <span class="text-red-400">*</span>
+                </p>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <label class="flex flex-col gap-1.5">
+                    <span class={labelTextClass}>State</span>
+                    <select
+                      bind:value={form.state}
+                      class="{selectClass} {errors.state
+                        ? 'border-red-300'
+                        : ''}"
+                    >
+                      <option value="">Select State</option>
+                      {#each INDIAN_STATES as s}
+                        <option value={s}>{s}</option>
+                      {/each}
+                    </select>
+                    {#if errors.state}<span class={errorClass}
+                        >{errors.state}</span
+                      >{/if}
+                  </label>
+                  <label class="flex flex-col gap-1.5">
+                    <span class={labelTextClass}>City</span>
+                    <input
+                      type="text"
+                      bind:value={form.city}
+                      class="{inputClass} {errors.city ? 'border-red-300' : ''}"
+                      placeholder="Enter city"
+                    />
+                    {#if errors.city}<span class={errorClass}
+                        >{errors.city}</span
+                      >{/if}
+                  </label>
+                  <label class="flex flex-col gap-1.5">
+                    <span class={labelTextClass}>Pincode</span>
+                    <input
+                      type="text"
+                      bind:value={form.pincode}
+                      class="{inputClass} {errors.pincode
+                        ? 'border-red-300'
+                        : ''}"
+                      placeholder="6-digit pincode"
+                      maxlength="6"
+                    />
+                    {#if errors.pincode}<span class={errorClass}
+                        >{errors.pincode}</span
+                      >{/if}
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <!-- ── Step 1: KYC Documents ── -->
+          {:else if currentStep === 1}
+            <div class="flex flex-col gap-5">
+              <div class="bg-blue-50 rounded-xl p-3.5 flex gap-3">
+                <svg
+                  class="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                <p class="text-[12px] text-blue-700">
+                  Upload clear, readable copies. Accepted formats: JPG, PNG, PDF
+                  — max 5MB each. All documents are securely stored with
+                  restricted access.
+                </p>
+              </div>
+
+              <!-- Aadhaar -->
+              <div class="flex flex-col gap-1.5">
+                <span class={labelTextClass}
+                  >Aadhaar Card <span class="text-red-400">*</span></span
+                >
+                <label for="aadhaarInput" class="cursor-pointer">
+                  <div
+                    class="border-2 border-dashed rounded-xl p-5 text-center transition-all"
+                    class:border-green-400={form.aadhaarFile}
+                    class:bg-green-50={form.aadhaarFile}
+                    style={!form.aadhaarFile && errors.aadhaarFile
+                      ? "border-color:#fca5a5;background:#fef2f2"
+                      : !form.aadhaarFile
+                        ? "border-color:#e5e7eb;background:#f9fafb"
+                        : ""}
+                  >
+                    {#if form.aadhaarFile}
+                      <div class="flex items-center justify-center gap-2">
+                        <svg
+                          class="w-5 h-5 text-green-500"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                          />
+                        </svg>
+                        <p class="text-[13px] font-medium text-green-700">
+                          {form.aadhaarFile.name}
+                        </p>
+                      </div>
+                      <p class="text-[11px] text-green-500 mt-1">
+                        Click to replace
+                      </p>
+                    {:else}
+                      <svg
+                        class="w-7 h-7 text-gray-300 mx-auto mb-2"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="1.5"
+                          d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                        />
+                      </svg>
+                      <p class="text-[13px] font-medium text-gray-600">
+                        Click to upload Aadhaar Card
+                      </p>
+                      <p class="text-[11px] text-gray-400 mt-1">
+                        JPG, PNG, PDF · Max 5MB
+                      </p>
+                    {/if}
+                  </div>
+                </label>
+                <input
+                  type="file"
+                  id="aadhaarInput"
+                  class="hidden"
+                  accept=".jpg,.jpeg,.png,.pdf"
+                  onchange={(e) => {
+                    form.aadhaarFile =
+                      (e.target as HTMLInputElement).files?.[0] ?? null;
+                  }}
+                />
+                {#if errors.aadhaarFile}<span class={errorClass}
+                    >{errors.aadhaarFile}</span
+                  >{/if}
+              </div>
+
+              <!-- PAN Card -->
+              <div class="flex flex-col gap-1.5">
+                <span class={labelTextClass}
+                  >PAN Card <span class="text-red-400">*</span></span
+                >
+                <label for="panInput" class="cursor-pointer">
+                  <div
+                    class="border-2 border-dashed rounded-xl p-5 text-center transition-all"
+                    class:border-green-400={form.panFile}
+                    class:bg-green-50={form.panFile}
+                    style={!form.panFile && errors.panFile
+                      ? "border-color:#fca5a5;background:#fef2f2"
+                      : !form.panFile
+                        ? "border-color:#e5e7eb;background:#f9fafb"
+                        : ""}
+                  >
+                    {#if form.panFile}
+                      <div class="flex items-center justify-center gap-2">
+                        <svg
+                          class="w-5 h-5 text-green-500"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                          />
+                        </svg>
+                        <p class="text-[13px] font-medium text-green-700">
+                          {form.panFile.name}
+                        </p>
+                      </div>
+                      <p class="text-[11px] text-green-500 mt-1">
+                        Click to replace
+                      </p>
+                    {:else}
+                      <svg
+                        class="w-7 h-7 text-gray-300 mx-auto mb-2"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="1.5"
+                          d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                        />
+                      </svg>
+                      <p class="text-[13px] font-medium text-gray-600">
+                        Click to upload PAN Card
+                      </p>
+                      <p class="text-[11px] text-gray-400 mt-1">
+                        JPG, PNG, PDF · Max 5MB
+                      </p>
+                    {/if}
+                  </div>
+                </label>
+                <input
+                  type="file"
+                  id="panInput"
+                  class="hidden"
+                  accept=".jpg,.jpeg,.png,.pdf"
+                  onchange={(e) => {
+                    form.panFile =
+                      (e.target as HTMLInputElement).files?.[0] ?? null;
+                  }}
+                />
+                {#if errors.panFile}<span class={errorClass}
+                    >{errors.panFile}</span
+                  >{/if}
+              </div>
+
+              <!-- Driving License -->
+              <div class="flex flex-col gap-1.5">
+                <span class={labelTextClass}
+                  >Driving License <span class="text-red-400">*</span></span
+                >
+                <label for="dlInput" class="cursor-pointer">
+                  <div
+                    class="border-2 border-dashed rounded-xl p-5 text-center transition-all"
+                    class:border-green-400={form.dlFile}
+                    class:bg-green-50={form.dlFile}
+                    style={!form.dlFile && errors.dlFile
+                      ? "border-color:#fca5a5;background:#fef2f2"
+                      : !form.dlFile
+                        ? "border-color:#e5e7eb;background:#f9fafb"
+                        : ""}
+                  >
+                    {#if form.dlFile}
+                      <div class="flex items-center justify-center gap-2">
+                        <svg
+                          class="w-5 h-5 text-green-500"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                          />
+                        </svg>
+                        <p class="text-[13px] font-medium text-green-700">
+                          {form.dlFile.name}
+                        </p>
+                      </div>
+                      <p class="text-[11px] text-green-500 mt-1">
+                        Click to replace
+                      </p>
+                    {:else}
+                      <svg
+                        class="w-7 h-7 text-gray-300 mx-auto mb-2"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="1.5"
+                          d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                        />
+                      </svg>
+                      <p class="text-[13px] font-medium text-gray-600">
+                        Click to upload Driving License
+                      </p>
+                      <p class="text-[11px] text-gray-400 mt-1">
+                        JPG, PNG, PDF · Max 5MB
+                      </p>
+                    {/if}
+                  </div>
+                </label>
+                <input
+                  type="file"
+                  id="dlInput"
+                  class="hidden"
+                  accept=".jpg,.jpeg,.png,.pdf"
+                  onchange={(e) => {
+                    form.dlFile =
+                      (e.target as HTMLInputElement).files?.[0] ?? null;
+                  }}
+                />
+                {#if errors.dlFile}<span class={errorClass}
+                    >{errors.dlFile}</span
+                  >{/if}
+              </div>
+            </div>
+
+            <!-- ── Step 2: Bank Details ── -->
+          {:else if currentStep === 2}
+            <div class="flex flex-col gap-5">
+              <div class="bg-amber-50 rounded-xl p-3.5 flex gap-3">
+                <svg
+                  class="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                  />
+                </svg>
+                <p class="text-[12px] text-amber-700">
+                  Bank details are encrypted and stored securely. Used for
+                  payment processing only.
+                </p>
+              </div>
+
+              <label class="flex flex-col gap-1.5">
+                <span class={labelTextClass}
+                  >Account Holder Name <span class="text-red-400">*</span></span
+                >
+                <input
+                  type="text"
+                  bind:value={form.accountHolderName}
+                  class="{inputClass} {errors.accountHolderName
+                    ? 'border-red-300'
+                    : ''}"
+                  placeholder="Name as on bank account"
+                />
+                {#if errors.accountHolderName}<span class={errorClass}
+                    >{errors.accountHolderName}</span
+                  >{/if}
+              </label>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <label class="flex flex-col gap-1.5">
+                  <span class={labelTextClass}
+                    >Bank Account Number <span class="text-red-400">*</span
+                    ></span
+                  >
+                  <input
+                    type="text"
+                    bind:value={form.accountNumber}
+                    class="{inputClass} {errors.accountNumber
+                      ? 'border-red-300'
+                      : ''}"
+                    placeholder="Enter account number"
+                    maxlength="18"
+                  />
+                  {#if errors.accountNumber}<span class={errorClass}
+                      >{errors.accountNumber}</span
+                    >{/if}
+                </label>
+                <label class="flex flex-col gap-1.5">
+                  <span class={labelTextClass}
+                    >Confirm Account Number <span class="text-red-400">*</span
+                    ></span
+                  >
+                  <input
+                    type="text"
+                    bind:value={form.confirmAccountNumber}
+                    class="{inputClass} {errors.confirmAccountNumber
+                      ? 'border-red-300'
+                      : ''}"
+                    placeholder="Re-enter account number"
+                    maxlength="18"
+                  />
+                  {#if errors.confirmAccountNumber}
+                    <span class={errorClass}>{errors.confirmAccountNumber}</span
+                    >
+                  {/if}
+                </label>
+              </div>
+
+              <label class="flex flex-col gap-1.5">
+                <span class={labelTextClass}
+                  >IFSC Code <span class="text-red-400">*</span></span
+                >
+                <input
+                  type="text"
+                  bind:value={form.ifsc}
+                  class="{inputClass} {errors.ifsc
+                    ? 'border-red-300'
+                    : ''} uppercase"
+                  placeholder="e.g., SBIN0001234"
+                  maxlength="11"
+                  oninput={(e) => {
+                    form.ifsc = (
+                      e.target as HTMLInputElement
+                    ).value.toUpperCase();
+                  }}
+                />
+                {#if errors.ifsc}<span class={errorClass}>{errors.ifsc}</span
+                  >{/if}
+              </label>
+
+              <!-- Cancel Cheque -->
+              <div class="flex flex-col gap-1.5">
+                <span class={labelTextClass}
+                  >Cancelled Cheque / Passbook Scan <span class="text-red-400"
+                    >*</span
+                  ></span
+                >
+                <label for="cancelChequeInput" class="cursor-pointer">
+                  <div
+                    class="border-2 border-dashed rounded-xl p-5 text-center transition-all"
+                    class:border-green-400={form.cancelChequeFile}
+                    class:bg-green-50={form.cancelChequeFile}
+                    style={!form.cancelChequeFile && errors.cancelChequeFile
+                      ? "border-color:#fca5a5;background:#fef2f2"
+                      : !form.cancelChequeFile
+                        ? "border-color:#e5e7eb;background:#f9fafb"
+                        : ""}
+                  >
+                    {#if form.cancelChequeFile}
+                      <div class="flex items-center justify-center gap-2">
+                        <svg
+                          class="w-5 h-5 text-green-500"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                          />
+                        </svg>
+                        <p class="text-[13px] font-medium text-green-700">
+                          {form.cancelChequeFile.name}
+                        </p>
+                      </div>
+                      <p class="text-[11px] text-green-500 mt-1">
+                        Click to replace
+                      </p>
+                    {:else}
+                      <svg
+                        class="w-7 h-7 text-gray-300 mx-auto mb-2"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="1.5"
+                          d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                        />
+                      </svg>
+                      <p class="text-[13px] font-medium text-gray-600">
+                        Upload Cancelled Cheque or Passbook
+                      </p>
+                      <p class="text-[11px] text-gray-400 mt-1">
+                        JPG, PNG, PDF · Max 5MB
+                      </p>
+                    {/if}
+                  </div>
+                </label>
+                <input
+                  type="file"
+                  id="cancelChequeInput"
+                  class="hidden"
+                  accept=".jpg,.jpeg,.png,.pdf"
+                  onchange={(e) => {
+                    form.cancelChequeFile =
+                      (e.target as HTMLInputElement).files?.[0] ?? null;
+                  }}
+                />
+                {#if errors.cancelChequeFile}<span class={errorClass}
+                    >{errors.cancelChequeFile}</span
+                  >{/if}
+              </div>
+            </div>
+
+            <!-- ── Step 3: Review & Submit ── -->
+          {:else if currentStep === 3}
+            <div class="flex flex-col gap-5">
+              <p class="text-[13px] text-gray-500">
+                Review your information before submitting. Use the Edit links to
+                make changes.
+              </p>
+
+              <!-- Basic Details Review -->
+              <div class="border border-gray-100 rounded-xl overflow-hidden">
+                <div
+                  class="bg-gray-50 px-4 py-2.5 flex items-center justify-between"
+                >
+                  <span class="text-[12px] font-semibold text-gray-700"
+                    >Basic Details</span
+                  >
+                  <button
+                    onclick={() => {
+                      currentStep = 0;
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }}
+                    class="text-[12px] font-medium hover:underline"
+                    style="color:#E87D1F">Edit</button
+                  >
+                </div>
+                <div class="p-4 grid grid-cols-2 gap-x-6 gap-y-3">
+                  <div>
+                    <p
+                      class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide"
+                    >
+                      Full Name
+                    </p>
+                    <p class="text-[13px] text-gray-900 mt-0.5">
+                      {form.fullName || "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <p
+                      class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide"
+                    >
+                      Phone
+                    </p>
+                    <p class="text-[13px] text-gray-900 mt-0.5">
+                      {form.phone ? "+91 " + form.phone : "—"}
+                    </p>
+                  </div>
+                  <div class="col-span-2">
+                    <p
+                      class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide"
+                    >
+                      Email
+                    </p>
+                    <div class="flex items-center gap-2 mt-0.5">
+                      <p class="text-[13px] text-gray-900">{form.email || "—"}</p>
+                      {#if form.email}<span class="text-[10px] font-semibold text-green-600 bg-green-100 px-1.5 py-0.5 rounded-full">Verified</span>{/if}
+                    </div>
+                  </div>
+                  <div class="col-span-2">
+                    <p
+                      class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide"
+                    >
+                      Address
+                    </p>
+                    <p class="text-[13px] text-gray-900 mt-0.5">
+                      {[form.city, form.state, form.pincode]
+                        .filter(Boolean)
+                        .join(", ") || "—"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- KYC Review -->
+              <div class="border border-gray-100 rounded-xl overflow-hidden">
+                <div
+                  class="bg-gray-50 px-4 py-2.5 flex items-center justify-between"
+                >
+                  <span class="text-[12px] font-semibold text-gray-700"
+                    >KYC Documents</span
+                  >
+                  <button
+                    onclick={() => {
+                      currentStep = 1;
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }}
+                    class="text-[12px] font-medium hover:underline"
+                    style="color:#E87D1F">Edit</button
+                  >
+                </div>
+                <div class="p-4 space-y-2">
+                  {#each [{ label: "Aadhaar Card", file: form.aadhaarFile }, { label: "PAN Card", file: form.panFile }, { label: "Driving License", file: form.dlFile }] as doc}
+                    <div class="flex items-center gap-2.5">
+                      <svg
+                        class="w-4 h-4 flex-shrink-0 {doc.file
+                          ? 'text-green-500'
+                          : 'text-red-400'}"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                          d={doc.file
+                            ? "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                            : "M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"}
+                        />
+                      </svg>
+                      <span class="text-[13px] text-gray-700">
+                        {doc.label}:
+                        <span
+                          class="font-medium {doc.file
+                            ? 'text-green-600'
+                            : 'text-red-500'}"
+                        >
+                          {doc.file?.name ?? "Not uploaded"}
+                        </span>
+                      </span>
+                    </div>
+                  {/each}
+                </div>
+              </div>
+
+              <!-- Bank Review -->
+              <div class="border border-gray-100 rounded-xl overflow-hidden">
+                <div
+                  class="bg-gray-50 px-4 py-2.5 flex items-center justify-between"
+                >
+                  <span class="text-[12px] font-semibold text-gray-700"
+                    >Bank Details</span
+                  >
+                  <button
+                    onclick={() => {
+                      currentStep = 2;
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }}
+                    class="text-[12px] font-medium hover:underline"
+                    style="color:#E87D1F">Edit</button
+                  >
+                </div>
+                <div class="p-4 grid grid-cols-2 gap-x-6 gap-y-3">
+                  <div class="col-span-2">
+                    <p
+                      class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide"
+                    >
+                      Account Holder
+                    </p>
+                    <p class="text-[13px] text-gray-900 mt-0.5">
+                      {form.accountHolderName || "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <p
+                      class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide"
+                    >
+                      Account Number
+                    </p>
+                    <p class="text-[13px] text-gray-900 mt-0.5 font-mono">
+                      {form.accountNumber
+                        ? "••••••" + form.accountNumber.slice(-4)
+                        : "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <p
+                      class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide"
+                    >
+                      IFSC Code
+                    </p>
+                    <p class="text-[13px] text-gray-900 mt-0.5 font-mono">
+                      {form.ifsc || "—"}
+                    </p>
+                  </div>
+                  <div class="col-span-2">
+                    <p
+                      class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide"
+                    >
+                      Cancel Cheque
+                    </p>
+                    <p
+                      class="text-[13px] mt-0.5 {form.cancelChequeFile
+                        ? 'text-green-600'
+                        : 'text-red-500'}"
+                    >
+                      {form.cancelChequeFile?.name ?? "Not uploaded"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Declaration -->
+              <div class="bg-gray-50 rounded-xl p-4">
+                <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+                <label class="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    bind:checked={termsAccepted}
+                    class="mt-0.5 w-4 h-4 rounded flex-shrink-0"
+                    style="accent-color:#E87D1F"
+                  />
+                  <span class="text-[12px] text-gray-600 leading-relaxed">
+                    I hereby declare that all information provided is true and
+                    accurate to the best of my knowledge. I understand that
+                    submitting false information may result in rejection or
+                    termination of my application.
+                  </span>
+                </label>
+              </div>
+            </div>
+          {/if}
+
+          <!-- Navigation Buttons -->
+          <div
+            class="flex items-center justify-between mt-8 pt-5 border-t border-gray-100"
+          >
+            <button
+              onclick={prevStep}
+              disabled={currentStep === 0}
+              class="px-5 py-2.5 text-[13px] text-gray-600 border border-gray-200 rounded-lg hover:border-gray-400 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              ← Back
+            </button>
+            <span class="text-[11px] text-gray-400"
+              >Step {currentStep + 1} of {STEPS.length}</span
+            >
+            {#if currentStep < STEPS.length - 1}
+              <button
+                onclick={nextStep}
+                class="px-5 py-2.5 text-[13px] text-white font-semibold rounded-lg hover:opacity-90 transition-opacity cursor-pointer"
+                style="background-color:#E87D1F"
+              >
+                Next →
+              </button>
+            {:else}
+              <button
+                onclick={handleSubmit}
+                disabled={!termsAccepted || isSubmitting}
+                class="px-5 py-2.5 text-[13px] text-white font-semibold bg-[linear-gradient(to_bottom,#0B182A,#021E44)] rounded-lg hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-2"
+              >
+                {#if isSubmitting}
+                  <svg
+                    class="w-3.5 h-3.5 animate-spin"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      class="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      stroke-width="4"
+                    />
+                    <path
+                      class="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8v8z"
+                    />
+                  </svg>
+                  Submitting…
+                {:else}
+                  Submit Application
+                {/if}
+              </button>
+            {/if}
+          </div>
+        </div>
+      </div>
+
+      <p class="text-center text-[11px] text-gray-500 mt-6 pb-4">
+        Having trouble? Contact support at <span class="text-gray-700"
+          >support@innoserve.in</span
+        >
+      </p>
+    </div>
+  {/if}
+</div>
