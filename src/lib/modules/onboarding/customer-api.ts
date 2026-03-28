@@ -1,3 +1,7 @@
+// ARCHITECTURE NOTE: submitCustomerOnboarding is a write operation via GraphQL
+// mutation — a known exception to the "REST for actions" rule. The onboarding
+// mutation bundles multiple domain objects server-side; no REST equivalent exists.
+
 import { gqlRequest } from "$lib/api/graphql";
 
 // ── Input shape (mirrors the frontend form) ─────────────────────────────────

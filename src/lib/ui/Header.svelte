@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { logout, toggleMobileSidebar } from "../stores/app.js";
+  import { toggleMobileSidebar } from "../stores/app.js";
+  import { authStore } from "../stores/auth.js";
   import * as Icons from "$lib/icons";
 
   const pageTitles: Record<string, string> = {
@@ -18,7 +19,15 @@
     page.url.pathname.replace("/data", "").replace(/^\//, "") || "dashboard",
   );
 
+  const currentUser = $derived($authStore.user);
+  const displayName = $derived(currentUser?.name ?? "User");
+
   let showDropdown = $state(false);
+
+  async function handleLogout() {
+    showDropdown = false;
+    await authStore.logout();
+  }
 </script>
 
 <header
@@ -53,7 +62,7 @@
 
   <div class="flex items-center gap-2 md:gap-4">
     <span class="hidden md:inline text-[14px] text-[#0B182A] font-normal">
-      Welcome Back, <strong class="font-semibold">John</strong>
+      Welcome Back, <strong class="font-semibold">{displayName}</strong>
     </span>
 
     <!-- Notification Bell -->
@@ -76,7 +85,7 @@
         onclick={() => (showDropdown = !showDropdown)}
       >
         <img
-          src="https://ui-avatars.com/api/?name=John&background=E87D1F&color=fff&size=36&font-size=0.4&bold=true"
+          src="https://ui-avatars.com/api/?name={encodeURIComponent(displayName)}&background=E87D1F&color=fff&size=36&font-size=0.4&bold=true"
           alt="User"
           class="w-full h-full object-cover block"
         />
@@ -107,10 +116,7 @@
           <hr class="border-none border-t border-gray-200 my-1" />
           <button
             class="flex items-center gap-2.5 w-full px-3 py-2.5 border-none bg-transparent rounded-md text-[13px] text-red-600 cursor-pointer transition-colors duration-150 hover:bg-gray-100"
-            onclick={() => {
-              showDropdown = false;
-              logout();
-            }}
+            onclick={handleLogout}
           >
             <Icons.LogOut size={16} />
             Logout

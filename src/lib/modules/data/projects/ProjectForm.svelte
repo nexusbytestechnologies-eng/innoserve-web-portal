@@ -1,6 +1,15 @@
 <script lang="ts">
   import * as Icons from "$lib/icons";
 
+  interface ProjectFormData {
+    name?: string;
+    customer?: string;
+    location?: string;
+    sla?: string;
+    status?: string;
+    tags?: string[];
+  }
+
   let {
     mode = "add",
     data = null,
@@ -8,7 +17,7 @@
     onClose,
   }: {
     mode?: "add" | "edit";
-    data?: Record<string, unknown> | null;
+    data?: ProjectFormData | null;
     onSave: (form: Record<string, unknown>) => void;
     onClose: () => void;
   } = $props();

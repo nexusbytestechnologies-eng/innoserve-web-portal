@@ -1,36 +1,61 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import * as Icons from "$lib/icons";
   import TicketForm from "./TicketForm.svelte";
-  import { createTicket } from "./api";
+  import { fetchTickets, type Ticket } from "./queries";
+  import { createTicket, updateTicket } from "./actions";
   import { toast } from "svelte-sonner";
 
-  type Ticket = {
+  // ── view-model (keeps the shape TicketForm expects) ──────────────────────
+  type TicketRow = {
     id: string;
     issue: string;
     sub: string;
     sla: string;
     place: string;
     engineer: string;
+    planner: string;
     status: string;
     priority: string;
     date: string;
   };
 
-  let tickets = $state<Ticket[]>([
-    { id: "TKT001", issue: "Database Error", sub: "SBI Bank", sla: "Breached", place: "Kerala", engineer: "Arun", status: "Open", priority: "High", date: "12/03/2026" },
-    { id: "TKT002", issue: "Network Device Failure", sub: "SBI Bank", sla: "On Track", place: "Tamil Nadu", engineer: "Anandhu", status: "Open", priority: "Medium", date: "12/03/2026" },
-    { id: "TKT003", issue: "Software Crash", sub: "SBI Bank", sla: "On Track", place: "Maharashtra", engineer: "Akshay", status: "Open", priority: "Low", date: "12/03/2026" },
-    { id: "TKT004", issue: "Database Error", sub: "SBI Bank", sla: "Breached", place: "Karnataka", engineer: "Jabbar", status: "Open", priority: "High", date: "12/03/2026" },
-    { id: "TKT005", issue: "Database Error", sub: "SBI Bank", sla: "On Track", place: "Kerala", engineer: "John", status: "Open", priority: "Medium", date: "12/03/2026" },
-    { id: "TKT006", issue: "Database Error", sub: "SBI Bank", sla: "On Track", place: "Kerala", engineer: "Shruthi", status: "Open", priority: "Low", date: "12/03/2026" },
-    { id: "TKT007", issue: "Database Error", sub: "SBI Bank", sla: "On Track", place: "Delhi", engineer: "Basi", status: "Open", priority: "Medium", date: "12/03/2026" },
-    { id: "TKT008", issue: "Database Error", sub: "SBI Bank", sla: "On Track", place: "Goa", engineer: "Kiran", status: "Open", priority: "Low", date: "12/03/2026" },
-    { id: "TKT009", issue: "Database Error", sub: "SBI Bank", sla: "Breached", place: "Kerala", engineer: "Varun", status: "Open", priority: "High", date: "12/03/2026" },
-  ]);
+  function toRow(t: Ticket): TicketRow {
+    return {
+      id: t.ticketNumber || t.id,
+      issue: t.title,
+      sub: t.author ?? "—",
+      sla: t.slaDeadline
+        ? new Date(t.slaDeadline) < new Date() ? "Breached" : "On Track"
+        : "On Track",
+      place: t.state ?? "—",
+      engineer: t.assignedEngineerId ?? "",
+      planner: t.statePlannerId ?? "",
+      status: t.status ?? "Open",
+      priority: t.priority ?? "Medium",
+      date: t.createdAt
+        ? new Date(t.createdAt).toLocaleDateString("en-GB")
+        : "—",
+    };
+  }
+
+  let tickets = $state<TicketRow[]>([]);
+  let loading = $state(true);
+
+  onMount(async () => {
+    try {
+      const data = await fetchTickets();
+      tickets = data.map(toRow);
+    } catch (err) {
+      toast.error("Failed to load tickets");
+    } finally {
+      loading = false;
+    }
+  });
 
   let showForm = $state(false);
   let formMode = $state<"add" | "edit">("add");
-  let editData = $state<Ticket | null>(null);
+  let editData = $state<TicketRow | null>(null);
 
   function openAdd() {
     formMode = "add";
@@ -38,7 +63,7 @@
     showForm = true;
   }
 
-  function openEdit(ticket: Ticket) {
+  function openEdit(ticket: TicketRow) {
     formMode = "edit";
     editData = { ...ticket };
     showForm = true;
@@ -47,24 +72,37 @@
   async function handleSave(form: Record<string, string>) {
     if (formMode === "add") {
       try {
-        // projectId, categoryId, assignedEngineerId are IDs not yet collected in the
-        // current form (form stores names/labels). These fields will be wired once
-        // the form is extended with proper lookup dropdowns.
         const created = await createTicket({
+          projectId: form.projectId || undefined,
           title: form.issue,
           status: form.status,
           priority: form.priority,
           state: form.place,
+          assignedEngineerId: form.engineer || undefined,
+          statePlannerId: form.planner || undefined,
           author: "system",
         });
-        tickets = [...tickets, { id: created.id, ...form } as Ticket];
+        tickets = [...tickets, toRow(created)];
         toast.success("Ticket created successfully");
       } catch (err) {
         toast.error(`Failed to create ticket: ${(err as Error).message}`);
         return;
       }
     } else if (editData) {
-      tickets = tickets.map((t) => (t.id === editData!.id ? { ...t, ...form } : t));
+      try {
+        const updated = await updateTicket({
+          id: editData.id,
+          status: form.status,
+          priority: form.priority,
+          assignedEngineerId: form.engineer || undefined,
+          statePlannerId: form.planner || undefined,
+        });
+        tickets = tickets.map((t) => (t.id === editData!.id ? { ...t, ...toRow(updated) } : t));
+        toast.success("Ticket updated");
+      } catch (err) {
+        toast.error(`Failed to update ticket: ${(err as Error).message}`);
+        return;
+      }
     }
     showForm = false;
   }
@@ -141,6 +179,11 @@
           </tr>
         </thead>
         <tbody>
+          {#if loading}
+            <tr><td colspan="9" class="py-10 text-center text-[13px] text-gray-400">Loading…</td></tr>
+          {:else if tickets.length === 0}
+            <tr><td colspan="9" class="py-10 text-center text-[13px] text-gray-400">No tickets yet</td></tr>
+          {:else}
           {#each tickets as ticket}
             <tr class="border-b border-gray-50 hover:bg-gray-50 transition-colors">
               <td class="py-3 px-3 text-accent font-medium text-[13px]">{ticket.id}</td>
@@ -180,6 +223,7 @@
               </td>
             </tr>
           {/each}
+          {/if}
         </tbody>
       </table>
     </div>

@@ -1,9 +1,12 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import * as Icons from "$lib/icons";
   import ProjectForm from "./ProjectForm.svelte";
-  import { createProject } from "./api";
+  import { fetchProjects, type Project as ApiProject } from "./queries";
+  import { createProject } from "./actions";
   import { toast } from "svelte-sonner";
 
+  // ── view-model (keeps the shape ProjectForm expects) ─────────────────────
   type Project = {
     id: string;
     name: string;
@@ -16,19 +19,34 @@
     tags: string[];
   };
 
-  let view = $state("table");
+  function toRow(p: ApiProject): Project {
+    return {
+      id: p.id,
+      name: p.name,
+      customer: p.customerId,   // resolved to name once customer list is available
+      location: "—",
+      sla: "—",
+      tickets: 0,
+      completed: 0,
+      status: "Active",
+      tags: [],
+    };
+  }
 
-  let projects = $state<Project[]>([
-    { id: "PRJ001", name: "ATM Deployment", customer: "HDFC Bank", location: "Kerala", sla: "4h Response", tickets: 12, completed: 34, status: "Active", tags: ["Hardware", "Networking"] },
-    { id: "PRJ002", name: "Server Setup", customer: "SBI Bank", location: "TamilNadu", sla: "2h Response", tickets: 8, completed: 20, status: "Inactive", tags: ["Software", "Deployment"] },
-    { id: "PRJ003", name: "Network Upgrade", customer: "ICICI Bank", location: "Maharashtra", sla: "2h Response", tickets: 0, completed: 15, status: "Active", tags: ["Networking"] },
-    { id: "PRJ004", name: "Branch Cabling", customer: "Axis Bank", location: "Rajasthan", sla: "4h Response", tickets: 15, completed: 40, status: "Inactive", tags: ["Hardware", "Electrical"] },
-    { id: "PRJ005", name: "POS Terminal Install", customer: "Kotak Bank", location: "Delhi", sla: "4h Response", tickets: 5, completed: 18, status: "Active", tags: ["Hardware", "Software"] },
-    { id: "PRJ006", name: "Biometric Setup", customer: "Canara Bank", location: "Mumbai", sla: "3h Response", tickets: 3, completed: 22, status: "Active", tags: ["Electrical", "Software"] },
-    { id: "PRJ007", name: "Branch Cabling", customer: "Axis Bank", location: "Rajasthan", sla: "4h Response", tickets: 15, completed: 31, status: "Inactive", tags: ["Hardware", "Networking"] },
-    { id: "PRJ008", name: "POS Terminal Install", customer: "Kotak Bank", location: "Delhi", sla: "4h Response", tickets: 5, completed: 10, status: "Active", tags: ["Hardware"] },
-    { id: "PRJ009", name: "Biometric Setup", customer: "Canara Bank", location: "Mumbai", sla: "3h Response", tickets: 3, completed: 27, status: "Active", tags: ["Electrical", "Software"] },
-  ]);
+  let view = $state("table");
+  let projects = $state<Project[]>([]);
+  let loading = $state(true);
+
+  onMount(async () => {
+    try {
+      const data = await fetchProjects();
+      projects = data.map(toRow);
+    } catch (err) {
+      toast.error("Failed to load projects");
+    } finally {
+      loading = false;
+    }
+  });
 
   let showForm = $state(false);
   let formMode = $state<"add" | "edit">("add");
@@ -174,6 +192,11 @@
             </tr>
           </thead>
           <tbody>
+            {#if loading}
+              <tr><td colspan="8" class="py-10 text-center text-[13px] text-gray-400">Loading…</td></tr>
+            {:else if projects.length === 0}
+              <tr><td colspan="8" class="py-10 text-center text-[13px] text-gray-400">No projects yet</td></tr>
+            {:else}
             {#each projects as p}
               <tr class="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                 <td class="py-3 px-3 text-[#E87D1F] font-medium text-[13px]">{p.id}</td>
@@ -205,6 +228,7 @@
                 </td>
               </tr>
             {/each}
+            {/if}
           </tbody>
         </table>
       </div>

@@ -2,7 +2,8 @@
   import { onMount } from "svelte";
   import * as Icons from "$lib/icons";
   import CustomerForm from "./CustomerForm.svelte";
-  import { fetchCustomers, createCustomer, updateCustomerStatus, type Customer } from "./api";
+  import { fetchCustomers, type Customer } from "./queries";
+  import { createCustomer, updateCustomerStatus } from "./actions";
   import { toast } from "svelte-sonner";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
 
