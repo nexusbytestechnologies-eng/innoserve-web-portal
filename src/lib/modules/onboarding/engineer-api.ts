@@ -1,3 +1,8 @@
+// ARCHITECTURE NOTE: submitEngineerOnboarding is a write operation via GraphQL
+// mutation — a known exception to the "REST for actions" rule. The backend
+// mutation handles file-ID stitching + multi-table inserts atomically; no
+// REST equivalent exists. Upload calls remain REST (/upload endpoint).
+
 import { gqlRequest } from "$lib/api/graphql";
 import { uploadFile } from "$lib/api/upload";
 

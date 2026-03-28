@@ -1,5 +1,24 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import * as Icons from "$lib/icons";
+  import { authStore } from "$lib/stores/auth";
+  import { fetchUsersByRole, type User } from "./queries";
+  import { fetchProjects, type Project } from "$lib/modules/data/projects/queries";
+  import { ROLE_STATUS_OPTIONS, TICKET_STATUS_LABELS } from "$lib/config/roles";
+  import { toast } from "svelte-sonner";
+
+  interface TicketFormData {
+    projectId?: string;
+    issue?: string;
+    sub?: string;
+    sla?: string;
+    place?: string;
+    engineer?: string;
+    planner?: string;
+    status?: string;
+    priority?: string;
+    date?: string;
+  }
 
   let {
     mode = "add",
@@ -8,38 +27,84 @@
     onClose,
   }: {
     mode?: "add" | "edit";
-    data?: Record<string, string> | null;
+    data?: TicketFormData | null;
     onSave: (form: Record<string, string>) => void;
     onClose: () => void;
   } = $props();
 
+  const userRole = $derived($authStore.user?.role ?? 'super_admin');
+
+  // Status options driven by config — no more hardcoded role strings here.
+  const statusOptions = $derived(
+    (ROLE_STATUS_OPTIONS[userRole] ?? ROLE_STATUS_OPTIONS.super_admin).map(
+      (s) => ({ value: s, label: TICKET_STATUS_LABELS[s] }),
+    ),
+  );
+
+  let engineers = $state<User[]>([]);
+  let planners = $state<User[]>([]);
+  let projects = $state<Project[]>([]);
+  let loadingUsers = $state(false);
+  let loadingProjects = $state(false);
+
+  onMount(async () => {
+    loadingUsers = true;
+    loadingProjects = true;
+    try {
+      const [eng, plan, projs] = await Promise.all([
+        fetchUsersByRole("engineer"),
+        fetchUsersByRole("state_planner"),
+        fetchProjects(),
+      ]);
+      engineers = eng;
+      planners = plan;
+      projects = projs;
+      if (projs.length === 1 && !form.projectId) {
+        form.projectId = projs[0].id;
+      }
+    } catch {
+      // non-critical — dropdowns fall back to empty
+    } finally {
+      loadingUsers = false;
+      loadingProjects = false;
+    }
+  });
+
   let form = $state({
+    projectId: data?.projectId ?? "",
     issue: data?.issue ?? "",
     sub: data?.sub ?? "",
     sla: data?.sla ?? "On Track",
     place: data?.place ?? "",
     engineer: data?.engineer ?? "",
+    planner: data?.planner ?? "",
     status: data?.status ?? "Open",
     priority: data?.priority ?? "Medium",
-    date:
-      data?.date ?? new Date().toLocaleDateString("en-GB").replace(/\//g, "/"),
+    date: data?.date ?? new Date().toLocaleDateString("en-GB"),
   });
 
   let errors = $state<Record<string, string>>({});
 
   function validate() {
     errors = {};
+    if (!form.projectId) errors.projectId = "Project is required";
     if (!form.issue.trim()) errors.issue = "Issue is required";
     if (!form.sub.trim()) errors.sub = "Customer / Subscriber is required";
     if (!form.place.trim()) errors.place = "Place / State is required";
-    if (!form.engineer.trim()) errors.engineer = "Engineer name is required";
     if (!form.date.trim()) errors.date = "Date is required";
     return Object.keys(errors).length === 0;
   }
 
   function handleSubmit(e: Event) {
     e.preventDefault();
-    if (!validate()) return;
+    if (!loadingProjects && projects.length === 0) {
+      toast.error("No project assigned. Please contact admin.");
+      return;
+    }
+    if (!validate()) {
+      if (errors.projectId) toast.error(errors.projectId);
+      return;
+    }
     onSave({ ...form });
   }
 
@@ -57,7 +122,6 @@
   role="presentation"
   onclick={onClose}
 >
-  <!-- Modal -->
   <!-- svelte-ignore a11y_interactive_supports_focus -->
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div
@@ -68,9 +132,7 @@
     onclick={(e) => e.stopPropagation()}
   >
     <!-- Header -->
-    <div
-      class="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0"
-    >
+    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
       <div>
         <h2 class="text-[16px] font-semibold text-[#0B182A]">
           {mode === "add" ? "Create Ticket" : "Edit Ticket"}
@@ -86,56 +148,54 @@
         class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600"
         aria-label="Close"
       >
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <line x1="18" y1="6" x2="6" y2="18" /><line
-            x1="6"
-            y1="6"
-            x2="18"
-            y2="18"
-          />
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
         </svg>
       </button>
     </div>
 
     <!-- Body -->
-    <form
-      class="px-6 py-5 flex flex-col gap-4 overflow-y-auto"
-      onsubmit={handleSubmit}
-    >
+    <form class="px-6 py-5 flex flex-col gap-4 overflow-y-auto" onsubmit={handleSubmit}>
+
+      <!-- Project -->
+      {#if loadingProjects}
+        <div class={labelClass}>
+          <span class={labelTextClass}>Project <span class="text-red-400">*</span></span>
+          <div class="px-3.5 py-2.5 border border-gray-200 rounded-lg text-[13px] text-gray-400 bg-gray-50">Loading projects…</div>
+        </div>
+      {:else if projects.length === 0}
+        <div class="px-4 py-3 rounded-lg bg-amber-50 border border-amber-200 text-[13px] text-amber-700 font-medium">
+          No project assigned. Please contact admin.
+        </div>
+      {:else if projects.length === 1}
+        <div class={labelClass}>
+          <span class={labelTextClass}>Project</span>
+          <div class="px-3.5 py-2.5 border border-gray-200 rounded-lg text-[13px] text-gray-700 bg-gray-50">{projects[0].name}</div>
+        </div>
+      {:else}
+        <label class={labelClass}>
+          <span class={labelTextClass}>Project <span class="text-red-400">*</span></span>
+          <select class={fieldClass} bind:value={form.projectId}>
+            <option value="">— Select Project —</option>
+            {#each projects as p}
+              <option value={p.id}>{p.name}</option>
+            {/each}
+          </select>
+          {#if errors.projectId}<span class={errorClass}>{errors.projectId}</span>{/if}
+        </label>
+      {/if}
+
       <!-- Issue -->
       <label class={labelClass}>
-        <span class={labelTextClass}
-          >Issue / Title <span class="text-red-400">*</span></span
-        >
-        <input
-          type="text"
-          placeholder="e.g. Database Error"
-          class={fieldClass}
-          bind:value={form.issue}
-        />
+        <span class={labelTextClass}>Issue / Title <span class="text-red-400">*</span></span>
+        <input type="text" placeholder="e.g. Database Error" class={fieldClass} bind:value={form.issue} />
         {#if errors.issue}<span class={errorClass}>{errors.issue}</span>{/if}
       </label>
 
       <!-- Customer / Sub -->
       <label class={labelClass}>
-        <span class={labelTextClass}
-          >Customer / Subscriber <span class="text-red-400">*</span></span
-        >
-        <input
-          type="text"
-          placeholder="e.g. SBI Bank"
-          class={fieldClass}
-          bind:value={form.sub}
-        />
+        <span class={labelTextClass}>Customer / Subscriber <span class="text-red-400">*</span></span>
+        <input type="text" placeholder="e.g. SBI Bank" class={fieldClass} bind:value={form.sub} />
         {#if errors.sub}<span class={errorClass}>{errors.sub}</span>{/if}
       </label>
 
@@ -163,52 +223,45 @@
         <label class={labelClass}>
           <span class={labelTextClass}>Status</span>
           <select class={fieldClass} bind:value={form.status}>
-            <option value="Open">Open</option>
-            <option value="In Progress">In Progress</option>
-            <option value="Closed">Closed</option>
+            {#each statusOptions as s}
+              <option value={s.value}>{s.label}</option>
+            {/each}
           </select>
         </label>
         <label class={labelClass}>
-          <span class={labelTextClass}
-            >Date <span class="text-red-400">*</span></span
-          >
-          <input
-            type="text"
-            placeholder="DD/MM/YYYY"
-            class={fieldClass}
-            bind:value={form.date}
-          />
+          <span class={labelTextClass}>Date <span class="text-red-400">*</span></span>
+          <input type="text" placeholder="DD/MM/YYYY" class={fieldClass} bind:value={form.date} />
           {#if errors.date}<span class={errorClass}>{errors.date}</span>{/if}
         </label>
       </div>
 
       <!-- Place -->
       <label class={labelClass}>
-        <span class={labelTextClass}
-          >Place / State <span class="text-red-400">*</span></span
-        >
-        <input
-          type="text"
-          placeholder="e.g. Kerala"
-          class={fieldClass}
-          bind:value={form.place}
-        />
+        <span class={labelTextClass}>Place / State <span class="text-red-400">*</span></span>
+        <input type="text" placeholder="e.g. Kerala" class={fieldClass} bind:value={form.place} />
         {#if errors.place}<span class={errorClass}>{errors.place}</span>{/if}
       </label>
 
-      <!-- Engineer -->
+      <!-- Assign Engineer -->
       <label class={labelClass}>
-        <span class={labelTextClass}
-          >Assigned Engineer <span class="text-red-400">*</span></span
-        >
-        <input
-          type="text"
-          placeholder="e.g. Arun"
-          class={fieldClass}
-          bind:value={form.engineer}
-        />
-        {#if errors.engineer}<span class={errorClass}>{errors.engineer}</span
-          >{/if}
+        <span class={labelTextClass}>Assigned Engineer</span>
+        <select class={fieldClass} bind:value={form.engineer} disabled={loadingUsers}>
+          <option value="">— Unassigned —</option>
+          {#each engineers as eng}
+            <option value={eng.id}>{eng.name} ({eng.email})</option>
+          {/each}
+        </select>
+      </label>
+
+      <!-- Assign State Planner -->
+      <label class={labelClass}>
+        <span class={labelTextClass}>State Planner</span>
+        <select class={fieldClass} bind:value={form.planner} disabled={loadingUsers}>
+          <option value="">— Unassigned —</option>
+          {#each planners as p}
+            <option value={p.id}>{p.name} ({p.email})</option>
+          {/each}
+        </select>
       </label>
 
       <!-- Footer -->
@@ -222,7 +275,8 @@
         </button>
         <button
           type="submit"
-          class="px-5 py-2.5 text-[13px] text-white font-semibold bg-[linear-gradient(to_bottom,#0B182A,#021E44)] rounded-lg hover:opacity-90 transition-opacity cursor-pointer"
+          disabled={!loadingProjects && projects.length === 0}
+          class="px-5 py-2.5 text-[13px] text-white font-semibold bg-[linear-gradient(to_bottom,#0B182A,#021E44)] rounded-lg hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {mode === "add" ? "Create Ticket" : "Save Changes"}
         </button>

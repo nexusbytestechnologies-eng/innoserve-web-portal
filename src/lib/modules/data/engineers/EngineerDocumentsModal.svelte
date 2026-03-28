@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { EngineerProfile } from "./api";
+  import type { EngineerProfile } from "./queries";
   import { fileUrl } from "$lib/api/upload";
 
   interface Props {

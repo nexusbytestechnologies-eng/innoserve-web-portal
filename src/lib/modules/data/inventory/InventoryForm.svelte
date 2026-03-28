@@ -1,6 +1,15 @@
 <script lang="ts">
   import * as Icons from "$lib/icons";
 
+  interface InventoryFormData {
+    name?: string;
+    category?: string;
+    qty?: number;
+    location?: string;
+    assigned?: string;
+    status?: string;
+  }
+
   let {
     mode = "add",
     data = null,
@@ -8,7 +17,7 @@
     onClose,
   }: {
     mode?: "add" | "edit";
-    data?: Record<string, unknown> | null;
+    data?: InventoryFormData | null;
     onSave: (form: Record<string, unknown>) => void;
     onClose: () => void;
   } = $props();

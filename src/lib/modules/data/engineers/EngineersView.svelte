@@ -1,11 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import * as Icons from "$lib/icons";
-  import {
-    fetchEngineerProfiles,
-    updateEngineerDocumentsStatus,
-    type EngineerProfile,
-  } from "./api";
+  import { fetchEngineerProfiles, type EngineerProfile } from "./queries";
+  import { updateEngineerDocumentsStatus } from "./actions";
   import { toast } from "svelte-sonner";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import EngineerDocumentsModal from "./EngineerDocumentsModal.svelte";

@@ -1,0 +1,347 @@
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import * as Icons from '$lib/icons';
+  import { toast } from 'svelte-sonner';
+  import { authStore } from '$lib/stores/auth';
+  import { fetchTickets, type Ticket } from '$lib/modules/data/tickets/queries';
+  import { createTicket } from '$lib/modules/data/tickets/actions';
+
+  const user = $derived($authStore.user);
+
+  // ── State ─────────────────────────────────────────────────────────────────
+
+  let tickets = $state<Ticket[]>([]);
+  let loading = $state(true);
+  let showForm = $state(false);
+  let submitting = $state(false);
+
+  let form = $state({
+    title: '',
+    description: '',
+    priority: 'Medium',
+    state: '',
+    city: '',
+    address: '',
+  });
+  let errors = $state<Record<string, string>>({});
+
+  // ── Load ──────────────────────────────────────────────────────────────────
+
+  onMount(async () => {
+    try {
+      tickets = await fetchTickets();
+    } catch (err) {
+      toast.error('Failed to load tickets');
+    } finally {
+      loading = false;
+    }
+  });
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  function statusBadge(status: string) {
+    const map: Record<string, string> = {
+      'Open': 'bg-blue-50 text-blue-600',
+      'In Progress': 'bg-amber-50 text-amber-600',
+      'Pending Validation': 'bg-purple-50 text-purple-600',
+      'Resolved': 'bg-green-50 text-green-600',
+      'Closed': 'bg-gray-100 text-gray-500',
+      'Cancelled': 'bg-red-50 text-red-500',
+    };
+    return map[status] ?? 'bg-gray-100 text-gray-500';
+  }
+
+  function priorityBadge(p: string) {
+    if (p === 'High') return 'bg-red-50 text-red-500';
+    if (p === 'Medium') return 'bg-amber-50 text-amber-500';
+    return 'bg-green-50 text-green-600';
+  }
+
+  function fmtDate(d: string) {
+    if (!d) return '—';
+    return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+
+  // ── Form ──────────────────────────────────────────────────────────────────
+
+  function openForm() {
+    form = { title: '', description: '', priority: 'Medium', state: '', city: '', address: '' };
+    errors = {};
+    showForm = true;
+  }
+
+  function validate(): boolean {
+    errors = {};
+    if (!form.title.trim()) errors.title = 'Issue title is required';
+    return Object.keys(errors).length === 0;
+  }
+
+  async function handleSubmit(e: Event) {
+    e.preventDefault();
+    if (!validate()) return;
+    submitting = true;
+    try {
+      const created = await createTicket({
+        title: form.title.trim(),
+        description: form.description.trim() || undefined,
+        priority: form.priority,
+        state: form.state.trim() || undefined,
+        city: form.city.trim() || undefined,
+        address: form.address.trim() || undefined,
+        status: 'Open',
+        author: user?.email ?? user?.id ?? 'customer',
+      });
+      tickets = [created, ...tickets];
+      toast.success('Ticket raised successfully');
+      showForm = false;
+    } catch (err) {
+      toast.error(`Failed to create ticket: ${(err as Error).message}`);
+    } finally {
+      submitting = false;
+    }
+  }
+
+  const fieldClass =
+    'px-3.5 py-2.5 border border-gray-200 rounded-lg text-[13px] text-gray-700 outline-none focus:border-[#0B182A] transition-colors w-full bg-white';
+  const labelClass = 'flex flex-col gap-1.5';
+  const labelTextClass = 'text-[11px] font-semibold text-gray-500 uppercase tracking-wide';
+  const errorClass = 'text-[11px] text-red-500 mt-0.5';
+</script>
+
+<svelte:head><title>My Tickets · Innoserve Techsol</title></svelte:head>
+
+<div class="flex flex-col gap-5">
+
+  <!-- Header row -->
+  <div class="flex items-center justify-between bg-white rounded-xl px-5 py-4 shadow">
+    <div>
+      <h2 class="text-[18px] font-semibold text-[#0B182A]">My Tickets</h2>
+      <p class="text-[13px] text-gray-400 mt-0.5">Track the status of your service requests</p>
+    </div>
+    <button
+      onclick={openForm}
+      class="flex items-center gap-1.5 px-4 py-2.5 bg-[linear-gradient(to_bottom,#0B182A,#021E44)] hover:opacity-90 text-white text-[13px] font-semibold rounded-lg cursor-pointer border-none transition-opacity"
+    >
+      <Icons.Plus size={14} strokeWidth={2.5} />
+      Raise Ticket
+    </button>
+  </div>
+
+  <!-- Stats strip -->
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+    {#each [
+      { label: 'Open', value: tickets.filter(t => t.status === 'Open').length, color: 'text-blue-600', bg: 'bg-blue-50' },
+      { label: 'In Progress', value: tickets.filter(t => t.status === 'In Progress').length, color: 'text-amber-600', bg: 'bg-amber-50' },
+      { label: 'Resolved', value: tickets.filter(t => t.status === 'Resolved').length, color: 'text-green-600', bg: 'bg-green-50' },
+      { label: 'Total', value: tickets.length, color: 'text-[#0B182A]', bg: 'bg-white' },
+    ] as stat}
+      <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+        <p class="text-[12px] text-gray-400 mb-1">{stat.label}</p>
+        <p class="text-[24px] font-bold {stat.color}">{loading ? '—' : stat.value}</p>
+      </div>
+    {/each}
+  </div>
+
+  <!-- Tickets table -->
+  <div class="bg-white rounded-2xl p-6 shadow">
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm border-collapse">
+        <thead>
+          <tr class="border-b border-gray-100">
+            {#each ['TICKET ID', 'ISSUE', 'STATUS', 'PRIORITY', 'SUPPORT', 'LOCATION', 'DATE'] as col}
+              <th class="text-left text-[11px] font-semibold text-gray-400 tracking-wide py-3 px-3 whitespace-nowrap">
+                {col}
+              </th>
+            {/each}
+          </tr>
+        </thead>
+        <tbody>
+          {#if loading}
+            <tr>
+              <td colspan="7" class="py-12 text-center text-[13px] text-gray-400">
+                <div class="flex items-center justify-center gap-2">
+                  <div class="w-4 h-4 border-2 border-gray-200 border-t-[#0B182A] rounded-full animate-spin"></div>
+                  Loading…
+                </div>
+              </td>
+            </tr>
+          {:else if tickets.length === 0}
+            <tr>
+              <td colspan="7" class="py-16 text-center">
+                <div class="flex flex-col items-center gap-3">
+                  <div class="w-12 h-12 rounded-full bg-gray-50 flex items-center justify-center">
+                    <Icons.Ticket size={22} stroke="#9ca3af" />
+                  </div>
+                  <p class="text-[13px] text-gray-400">No tickets yet</p>
+                  <button
+                    onclick={openForm}
+                    class="text-[13px] font-medium text-[#E87D1F] hover:underline cursor-pointer"
+                  >
+                    Raise your first ticket
+                  </button>
+                </div>
+              </td>
+            </tr>
+          {:else}
+            {#each tickets as t}
+              <tr class="border-b border-gray-50 hover:bg-gray-50/60 transition-colors">
+                <td class="py-3 px-3 text-[13px] font-semibold text-[#E87D1F] whitespace-nowrap">
+                  {t.ticketNumber || t.id.slice(0, 8)}
+                </td>
+                <td class="py-3 px-3">
+                  <p class="text-[13px] font-medium text-gray-800 max-w-50 truncate">{t.title}</p>
+                  {#if t.description}
+                    <p class="text-[11px] text-gray-400 max-w-50 truncate">{t.description}</p>
+                  {/if}
+                </td>
+                <td class="py-3 px-3">
+                  <span class="text-[11px] font-semibold px-2.5 py-1 rounded-full {statusBadge(t.status)}">
+                    {t.status || '—'}
+                  </span>
+                </td>
+                <td class="py-3 px-3">
+                  <span class="text-[11px] font-semibold px-2.5 py-1 rounded-full {priorityBadge(t.priority)}">
+                    {t.priority || '—'}
+                  </span>
+                </td>
+                <td class="py-3 px-3">
+                  {#if t.escalationLevel}
+                    <span class="text-[11px] font-semibold px-2.5 py-1 rounded-full
+                                 {t.escalationLevel === 'L3' ? 'bg-red-50 text-red-600' : 'bg-orange-50 text-orange-600'}">
+                      {t.escalationLevel} Support
+                    </span>
+                  {:else}
+                    <span class="text-[12px] text-gray-300">—</span>
+                  {/if}
+                </td>
+                <td class="py-3 px-3 text-[13px] text-gray-600">{t.state || '—'}</td>
+                <td class="py-3 px-3 text-[12px] text-gray-400 whitespace-nowrap">{fmtDate(t.createdAt)}</td>
+              </tr>
+            {/each}
+          {/if}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Raise Ticket Modal -->
+{#if showForm}
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+    role="presentation"
+    onclick={() => (showForm = false)}
+  >
+    <div
+      class="bg-white rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] flex flex-col"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Raise Ticket"
+      onclick={(e) => e.stopPropagation()}
+    >
+      <!-- Header -->
+      <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
+        <div>
+          <h2 class="text-[16px] font-semibold text-[#0B182A]">Raise a Ticket</h2>
+          <p class="text-[12px] text-gray-400 mt-0.5">Describe your issue and we'll assign an engineer</p>
+        </div>
+        <button
+          onclick={() => (showForm = false)}
+          class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+          aria-label="Close"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Form -->
+      <form class="px-6 py-5 flex flex-col gap-4 overflow-y-auto" onsubmit={handleSubmit} novalidate>
+        <!-- Title -->
+        <label class={labelClass}>
+          <span class={labelTextClass}>Issue Title <span class="text-red-400">*</span></span>
+          <input
+            type="text"
+            placeholder="e.g. ATM not dispensing cash"
+            class={fieldClass}
+            bind:value={form.title}
+          />
+          {#if errors.title}<span class={errorClass}>{errors.title}</span>{/if}
+        </label>
+
+        <!-- Description -->
+        <label class={labelClass}>
+          <span class={labelTextClass}>Description</span>
+          <textarea
+            placeholder="Describe the problem in detail…"
+            rows="3"
+            class="{fieldClass} resize-none"
+            bind:value={form.description}
+          ></textarea>
+        </label>
+
+        <!-- Priority -->
+        <label class={labelClass}>
+          <span class={labelTextClass}>Priority</span>
+          <select class={fieldClass} bind:value={form.priority}>
+            <option value="Low">Low</option>
+            <option value="Medium">Medium</option>
+            <option value="High">High</option>
+          </select>
+        </label>
+
+        <!-- Location row -->
+        <div class="grid grid-cols-2 gap-4">
+          <label class={labelClass}>
+            <span class={labelTextClass}>State</span>
+            <input
+              type="text"
+              placeholder="e.g. Kerala"
+              class={fieldClass}
+              bind:value={form.state}
+            />
+          </label>
+          <label class={labelClass}>
+            <span class={labelTextClass}>City</span>
+            <input
+              type="text"
+              placeholder="e.g. Kochi"
+              class={fieldClass}
+              bind:value={form.city}
+            />
+          </label>
+        </div>
+
+        <!-- Address -->
+        <label class={labelClass}>
+          <span class={labelTextClass}>Address / Branch</span>
+          <input
+            type="text"
+            placeholder="Branch address or landmark"
+            class={fieldClass}
+            bind:value={form.address}
+          />
+        </label>
+
+        <!-- Footer -->
+        <div class="flex justify-end gap-3 pt-2 border-t border-gray-100 mt-1">
+          <button
+            type="button"
+            onclick={() => (showForm = false)}
+            class="px-5 py-2.5 text-[13px] text-gray-600 border border-gray-200 rounded-lg hover:border-gray-400 transition-colors cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={submitting}
+            class="px-5 py-2.5 text-[13px] font-semibold text-white bg-[linear-gradient(to_bottom,#0B182A,#021E44)] rounded-lg hover:opacity-90 transition-opacity disabled:opacity-60 cursor-pointer"
+          >
+            {submitting ? 'Submitting…' : 'Raise Ticket'}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+{/if}

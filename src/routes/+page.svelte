@@ -21,7 +21,7 @@
           fadeOut = true;
           setTimeout(() => {
             toast.success("Redirecting to login page...");
-            goto("/auth");
+            goto("/login");
           }, 600);
         }, 300);
       }

@@ -1,3 +1,10 @@
+// ARCHITECTURE NOTE
+// -----------------
+// Rule: GraphQL → queries only; REST → actions only.
+// createRole / createUserRole are write operations (violations of the rule).
+// They remain as GraphQL mutations because the backend has no REST endpoints
+// for role management yet. Migrate once the backend exposes REST routes.
+
 import { gqlRequest } from "./graphql";
 
 // ── Types ──────────────────────────────────────────────────────────────────

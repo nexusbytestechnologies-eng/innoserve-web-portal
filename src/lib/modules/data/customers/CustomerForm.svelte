@@ -1,5 +1,6 @@
 <script lang="ts">
   import * as Icons from "$lib/icons";
+  import { type Customer } from "./queries";
 
   let {
     mode = "add",
@@ -8,17 +9,17 @@
     onClose,
   }: {
     mode?: "add" | "edit";
-    data?: Record<string, string | number> | null;
+    data?: Customer | null;
     onSave: (form: Record<string, string>) => void;
     onClose: () => void;
   } = $props();
 
   let form = $state({
-    company: (data?.company as string) ?? "",
-    contact: (data?.contact as string) ?? "",
-    phone: (data?.phone as string) ?? "",
-    location: (data?.location as string) ?? "",
-    status: (data?.status as string) ?? "Active",
+    company: data?.companyName ?? "",
+    contact: data?.contactPersonName ?? "",
+    phone: data?.phone ?? "",
+    location: data?.addressState ?? "",
+    status: data?.status ?? "Active",
   });
 
   let errors = $state<Record<string, string>>({});

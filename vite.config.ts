@@ -8,7 +8,8 @@ export default defineConfig({
 		proxy: {
 			'/graphql': 'http://localhost:4000',
 			'/upload': 'http://localhost:4000',
-			'/file': 'http://localhost:4000'
+			'/file': 'http://localhost:4000',
+			'^/api/(?!otp)': { target: 'http://localhost:4000', changeOrigin: true }
 		}
 	}
 });

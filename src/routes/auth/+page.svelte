@@ -1,5 +1,7 @@
-<script>
-  import LoginPage from "$lib/modules/auth/LoginPage.svelte";
-</script>
+<script lang="ts">
+  import { goto } from "$app/navigation";
+  import { onMount } from "svelte";
 
-<LoginPage />
+  // /auth is kept for backward-compat — redirect to canonical /login
+  onMount(() => goto("/login", { replaceState: true }));
+</script>
