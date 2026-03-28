@@ -28,7 +28,7 @@
 # SvelteKit-handled OTP routes — must come before the /api/* catch-all
 [[redirects]]
   from = "/api/otp/*"
-  to = "/.netlify/functions/server"
+  to = "/.netlify/functions/sveltekit-render"
   status = 200
   force = true
 
