@@ -25,6 +25,13 @@
   status = 200
   force = true
 
+# SvelteKit-handled OTP routes — must come before the /api/* catch-all
+[[redirects]]
+  from = "/api/otp/*"
+  to = "/.netlify/functions/server"
+  status = 200
+  force = true
+
 # Auth REST endpoints (Fastify JWT)
 [[redirects]]
   from = "/api/*"
