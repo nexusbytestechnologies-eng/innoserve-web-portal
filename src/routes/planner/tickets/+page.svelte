@@ -4,7 +4,13 @@
   import { toast } from 'svelte-sonner';
   import { authStore } from '$lib/stores/auth';
   import { fetchTickets, fetchUsersByRole, type Ticket, type User } from '$lib/modules/data/tickets/queries';
-  import { updateTicket, createTicketHistory } from '$lib/modules/data/tickets/actions';
+  import { createTicketHistory } from '$lib/modules/data/tickets/actions';
+  import {
+    assignTicket as assignTicketRequest,
+    escalateTicket as escalateTicketRequest,
+  } from '$lib/api/tickets';
+  import { fetchProjects, type Project } from '$lib/modules/data/projects/queries';
+  import { TICKET_STATUS_LABELS } from '$lib/config/roles';
 
   const user = $derived($authStore.user);
 
@@ -18,6 +24,7 @@
   let tickets = $state<Ticket[]>([]);
   let engineers = $state<User[]>([]);
   let planners = $state<User[]>([]);
+  let projects = $state<Project[]>([]);
   let loading = $state(true);
 
   // Assign modal
@@ -36,14 +43,16 @@
 
   onMount(async () => {
     try {
-      const [allTickets, eng, plan] = await Promise.all([
+      const [allTickets, eng, plan, projs] = await Promise.all([
         fetchTickets(),
         fetchUsersByRole('engineer'),
         fetchUsersByRole('state_planner'),
+        fetchProjects().catch(() => [] as Project[]),
       ]);
       tickets = allTickets;
       engineers = eng;
       planners = plan;
+      projects = projs;
     } catch {
       toast.error('Failed to load data');
     } finally {
@@ -53,16 +62,29 @@
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
+  function normalizeStatus(status: string): string {
+    return (status ?? '').toLowerCase().replace(/\s+/g, '_');
+  }
+
+  function statusLabel(status: string): string {
+    return TICKET_STATUS_LABELS[normalizeStatus(status) as keyof typeof TICKET_STATUS_LABELS] ?? status ?? '—';
+  }
+
   function statusBadge(status: string) {
     const map: Record<string, string> = {
-      'Open': 'bg-blue-50 text-blue-600',
-      'In Progress': 'bg-amber-50 text-amber-600',
-      'Pending Validation': 'bg-purple-50 text-purple-700',
-      'Resolved': 'bg-green-50 text-green-600',
-      'Closed': 'bg-gray-100 text-gray-500',
-      'Cancelled': 'bg-red-50 text-red-500',
+      open: 'bg-blue-50 text-blue-600',
+      assigned: 'bg-indigo-50 text-indigo-600',
+      in_progress: 'bg-amber-50 text-amber-600',
+      on_hold: 'bg-yellow-50 text-yellow-700',
+      pending_replacement: 'bg-fuchsia-50 text-fuchsia-700',
+      escalated_l2: 'bg-orange-50 text-orange-600',
+      escalated_l3: 'bg-red-50 text-red-600',
+      pending_validation: 'bg-purple-50 text-purple-700',
+      resolved: 'bg-green-50 text-green-600',
+      closed: 'bg-gray-100 text-gray-500',
+      reopened: 'bg-cyan-50 text-cyan-700',
     };
-    return map[status] ?? 'bg-gray-100 text-gray-500';
+    return map[normalizeStatus(status)] ?? 'bg-gray-100 text-gray-500';
   }
 
   function priorityBadge(p: string) {
@@ -82,12 +104,17 @@
     return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   }
 
+  function projectName(id: string): string {
+    if (!id) return '—';
+    return projects.find((p) => p.id === id)?.name ?? '—';
+  }
+
   function nameById(list: User[], id: string) {
     return list.find((u) => u.id === id)?.name ?? id.slice(0, 8);
   }
 
   function canAct(t: Ticket) {
-    return !['Closed', 'Cancelled'].includes(t.status);
+    return !['closed'].includes(normalizeStatus(t.status));
   }
 
   // ── Assign ────────────────────────────────────────────────────────────────
@@ -102,9 +129,8 @@
     if (!assignTicket) return;
     assigning = true;
     try {
-      const updated = await updateTicket({
-        id: assignTicket.id,
-        assignedEngineerId: assignEngineerId || undefined,
+      const updated = await assignTicketRequest(assignTicket.id, {
+        engineerId: assignEngineerId || undefined,
         statePlannerId: assignPlannerId || undefined,
       });
       await createTicketHistory({
@@ -138,10 +164,13 @@
     if (!escalateTicket || !escalationLevel) return;
     escalating = true;
     try {
-      const updated = await updateTicket({ id: escalateTicket.id, escalationLevel });
+      const updated = await escalateTicketRequest(escalateTicket.id, {
+        level: escalationLevel,
+        reason: escalationReason.trim() || `Support requested: ${escalationLevel}`,
+      });
       await createTicketHistory({
         ticketId: escalateTicket.id,
-        status: escalateTicket.status,
+        status: normalizeStatus(escalateTicket.status),
         remarks: `Support requested: ${escalationLevel}${escalationReason.trim() ? ` — ${escalationReason.trim()}` : ''}`,
         author: user?.id ?? 'planner',
       });
@@ -164,7 +193,7 @@
   <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
     {#each [
       { label: 'Total', value: tickets.length, color: 'text-[#0B182A]' },
-      { label: 'Open', value: tickets.filter(t => t.status === 'Open').length, color: 'text-blue-600' },
+      { label: 'Open', value: tickets.filter(t => normalizeStatus(t.status) === 'open').length, color: 'text-blue-600' },
       { label: 'Unassigned', value: tickets.filter(t => !t.assignedEngineerId).length, color: 'text-amber-600' },
       { label: 'Escalated', value: tickets.filter(t => t.escalationLevel).length, color: 'text-red-500' },
     ] as stat}
@@ -186,7 +215,7 @@
       <table class="w-full text-sm border-collapse">
         <thead>
           <tr class="border-b border-gray-100">
-            {#each ['TICKET', 'ISSUE', 'STATUS', 'PRIORITY', 'ENGINEER', 'ESCALATION', 'DATE', 'ACTIONS'] as col}
+            {#each ['TICKET', 'PROJECT', 'ISSUE', 'STATUS', 'PRIORITY', 'ENGINEER', 'ESCALATION', 'DATE', 'ACTIONS'] as col}
               <th class="text-left text-[11px] font-semibold text-gray-400 tracking-wide py-3 px-3 whitespace-nowrap">{col}</th>
             {/each}
           </tr>
@@ -194,7 +223,7 @@
         <tbody>
           {#if loading}
             <tr>
-              <td colspan="8" class="py-12 text-center text-[13px] text-gray-400">
+              <td colspan="9" class="py-12 text-center text-[13px] text-gray-400">
                 <div class="flex items-center justify-center gap-2">
                   <div class="w-4 h-4 border-2 border-gray-200 border-t-[#0B182A] rounded-full animate-spin"></div>
                   Loading…
@@ -203,7 +232,7 @@
             </tr>
           {:else if tickets.length === 0}
             <tr>
-              <td colspan="8" class="py-16 text-center">
+              <td colspan="9" class="py-16 text-center">
                 <div class="flex flex-col items-center gap-2">
                   <div class="w-12 h-12 rounded-full bg-gray-50 flex items-center justify-center">
                     <Icons.Ticket size={22} stroke="#9ca3af" />
@@ -219,6 +248,7 @@
                 <td class="py-3 px-3 text-[13px] font-semibold text-[#E87D1F] whitespace-nowrap">
                   {t.ticketNumber || t.id.slice(0, 8)}
                 </td>
+                <td class="py-3 px-3 text-[13px] text-gray-600 whitespace-nowrap">{projectName(t.projectId)}</td>
                 <td class="py-3 px-3">
                   <p class="text-[13px] font-medium text-gray-800 max-w-[160px] truncate">{t.title}</p>
                   {#if t.state}
@@ -227,7 +257,7 @@
                 </td>
                 <td class="py-3 px-3">
                   <span class="text-[11px] font-semibold px-2.5 py-1 rounded-full {statusBadge(t.status)}">
-                    {t.status || '—'}
+                    {statusLabel(t.status)}
                   </span>
                 </td>
                 <td class="py-3 px-3">
@@ -287,7 +317,7 @@
                       {/if}
                     </div>
                   {:else}
-                    <span class="text-[12px] text-gray-400">{t.status}</span>
+                    <span class="text-[12px] text-gray-400">{statusLabel(t.status)}</span>
                   {/if}
                 </td>
               </tr>

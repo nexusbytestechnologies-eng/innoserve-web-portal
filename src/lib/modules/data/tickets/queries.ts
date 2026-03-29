@@ -79,6 +79,14 @@ const FETCH_USERS_BY_ROLE = `
   }
 `;
 
+const FETCH_TICKET_CATEGORIES = `
+  query {
+    ticketCategories {
+      id name defaultPayout author 
+    }
+  }
+`;
+
 // ── Functions ──────────────────────────────────────────────────────────────
 
 export async function fetchTickets(): Promise<Ticket[]> {
@@ -87,6 +95,15 @@ export async function fetchTickets(): Promise<Ticket[]> {
 }
 
 export async function fetchUsersByRole(role: string): Promise<User[]> {
-  const data = await gqlRequest<{ users: User[] }>(FETCH_USERS_BY_ROLE, { role });
+  const data = await gqlRequest<{ users: User[] }>(FETCH_USERS_BY_ROLE, {
+    role,
+  });
   return data.users;
+}
+
+export async function fetchTicketCategories(): Promise<TicketCategory[]> {
+  const data = await gqlRequest<{ ticketCategories: TicketCategory[] }>(
+    FETCH_TICKET_CATEGORIES,
+  );
+  return data.ticketCategories;
 }

@@ -3,27 +3,99 @@
   import * as Icons from '$lib/icons';
   import { toast } from 'svelte-sonner';
   import { authStore } from '$lib/stores/auth';
-  import { fetchTickets, type Ticket } from '$lib/modules/data/tickets/queries';
-  import { updateTicket, createTicketHistory } from '$lib/modules/data/tickets/actions';
+  import ClosureChecklist from '$lib/modules/data/tickets/ClosureChecklist.svelte';
+  import RcaSection from '$lib/modules/data/tickets/RcaSection.svelte';
+  import {
+    fetchTicketCategories,
+    fetchTickets,
+    type Ticket,
+    type TicketCategory,
+  } from '$lib/modules/data/tickets/queries';
+  import { createTicketHistory } from '$lib/modules/data/tickets/actions';
+  import { updateTicketStatus, validateTicket, assignTicket } from '$lib/api/tickets';
+  import type { ClosureEligibility } from '$lib/api/ticket-closure';
+  import { fetchProjects, type Project } from '$lib/modules/data/projects/queries';
+  import { ApiError, restRequest } from '$lib/api/rest';
 
   const user = $derived($authStore.user);
 
   // ── State ─────────────────────────────────────────────────────────────────
 
-  let tickets = $state<Ticket[]>([]);
-  let loading = $state(true);
+  let tickets         = $state<Ticket[]>([]);
+  let projects        = $state<Project[]>([]);
+  let loading         = $state(true);
 
-  // Validation modal (Approve & Close / Close Ticket)
-  let actionTicket = $state<Ticket | null>(null);
-  let actionType = $state<'approve' | 'close'>('approve');
-  let actionRemarks = $state('');
-  let actioning = $state(false);
+  // Tabs
+  let activeTab       = $state<'all' | 'unassigned'>('all');
+  let unassigned      = $state<Ticket[]>([]);
+  let loadingUnassigned = $state(false);
+
+  // Validation / close modal
+  let actionTicket    = $state<Ticket | null>(null);
+  let actionType      = $state<'approve' | 'close'>('approve');
+  let actionRemarks   = $state('');
+  let actioning       = $state(false);
+  let actionEligibility = $state<ClosureEligibility | null>(null);
+  let checklistRefreshKey = $state(0);
+  let validatingTicketId  = $state<string | null>(null);
+
+  // Assignment panel
+  type User = { id: string; name: string; role: string };
+  let assignTarget    = $state<Ticket | null>(null);
+  let assignPlanners  = $state<User[]>([]);
+  let assignEngineers = $state<User[]>([]);
+  let assignForm      = $state({ engineerId: '', statePlannerId: '' });
+  let assigning       = $state(false);
+  let loadingAssignees = $state(false);
+
+  // Escalation modal
+  let escalateTarget  = $state<Ticket | null>(null);
+  let escalateUsers   = $state<User[]>([]);
+  let escalateForm    = $state({ level: 'L2', engineerId: '', reason: '' });
+  let escalateErrors  = $state<Record<string, string>>({});
+  let escalating      = $state(false);
+  let loadingEscalateUsers = $state(false);
+
+  const filteredEscalateUsers = $derived(
+    escalateUsers.filter(u =>
+      escalateForm.level === 'L2' ? u.role === 'l2_engineer' :
+      escalateForm.level === 'L3' ? u.role === 'l3_engineer' :
+      true,
+    ),
+  );
+
+  // Create ticket modal
+  type Customer = { id: string; companyName: string; status?: string };
+  let showCreate  = $state(false);
+  let submitting  = $state(false);
+  let customers   = $state<Customer[]>([]);
+  let categories  = $state<TicketCategory[]>([]);
+  let formProjects = $state<Project[]>([]);
+  let form = $state({
+    customerId:  '',
+    projectId:   '',
+    categoryId:  '',
+    title:       '',
+    description: '',
+    priority:    'Medium',
+    state:       '',
+    city:        '',
+    address:     '',
+  });
+  let formErrors = $state<Record<string, string>>({});
 
   // ── Load ──────────────────────────────────────────────────────────────────
 
   onMount(async () => {
     try {
-      tickets = await fetchTickets();
+      const [fetchedTickets, fetchedProjects, fetchedCustomers] = await Promise.all([
+        fetchTickets(),
+        fetchProjects().catch(() => [] as Project[]),
+        restRequest<Customer[]>('/api/customers'),
+      ]);
+      tickets   = fetchedTickets;
+      projects  = fetchedProjects;
+      customers = fetchedCustomers.filter((c) => c.status !== 'inactive');
     } catch {
       toast.error('Failed to load tickets');
     } finally {
@@ -31,23 +103,182 @@
     }
   });
 
+  // ── Unassigned queue ──────────────────────────────────────────────────────
+
+  async function loadUnassigned() {
+    loadingUnassigned = true;
+    try {
+      unassigned = await restRequest<Ticket[]>('/api/tickets?status=open&assignedEngineerId=null');
+    } catch {
+      toast.error('Failed to load unassigned tickets');
+    } finally {
+      loadingUnassigned = false;
+    }
+  }
+
+  function switchTab(tab: 'all' | 'unassigned') {
+    activeTab = tab;
+    if (tab === 'unassigned') void loadUnassigned();
+  }
+
+  // ── Assignment panel ──────────────────────────────────────────────────────
+
+  async function openAssign(t: Ticket) {
+    const tAny = t as any;
+    assignTarget = t;
+    assignForm   = { engineerId: tAny.engineerId ?? '', statePlannerId: tAny.statePlannerId ?? '' };
+    loadingAssignees = true;
+    assignPlanners   = [];
+    assignEngineers  = [];
+    try {
+      const stateId = tAny.stateId;
+      const qs = stateId ? `&stateId=${encodeURIComponent(stateId)}` : '';
+      const [planners, engineers] = await Promise.all([
+        restRequest<User[]>(`/api/users?role=state_planner${qs}`),
+        restRequest<User[]>(`/api/users?role=engineer${qs}`),
+      ]);
+      assignPlanners  = planners;
+      assignEngineers = engineers;
+    } catch {
+      toast.error('Failed to load assignees');
+    } finally {
+      loadingAssignees = false;
+    }
+  }
+
+  async function submitAssign() {
+    if (!assignTarget) return;
+    if (!assignForm.engineerId && !assignForm.statePlannerId) {
+      toast.error('Select at least one assignee');
+      return;
+    }
+    assigning = true;
+    try {
+      const updated = await assignTicket(assignTarget.id, {
+        engineerId:     assignForm.engineerId     || undefined,
+        statePlannerId: assignForm.statePlannerId || undefined,
+      });
+      tickets    = tickets.map(t => t.id === updated.id ? { ...t, ...updated } : t);
+      unassigned = unassigned.filter(t => t.id !== updated.id);
+      toast.success('Ticket assigned successfully');
+      assignTarget = null;
+    } catch (err) {
+      toast.error(`Failed: ${(err as Error).message}`);
+    } finally {
+      assigning = false;
+    }
+  }
+
+  // ── Escalation modal ──────────────────────────────────────────────────────
+
+  async function openEscalate(t: Ticket) {
+    escalateTarget = t;
+    escalateForm   = { level: 'L2', engineerId: '', reason: '' };
+    escalateErrors = {};
+    loadingEscalateUsers = true;
+    escalateUsers = [];
+    try {
+      const [l2, l3] = await Promise.all([
+        restRequest<User[]>('/api/users?role=l2_engineer').catch(() => []),
+        restRequest<User[]>('/api/users?role=l3_engineer').catch(() => []),
+      ]);
+      escalateUsers = [...l2, ...l3];
+    } finally {
+      loadingEscalateUsers = false;
+    }
+  }
+
+  async function submitEscalate() {
+    if (!escalateTarget) return;
+    escalateErrors = {};
+    if (!escalateForm.reason.trim()) { escalateErrors.reason = 'Reason is required'; return; }
+    escalating = true;
+    try {
+      const updated = await restRequest<Ticket>(`/api/tickets/${escalateTarget.id}/escalate`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          level:      escalateForm.level,
+          reason:     escalateForm.reason.trim(),
+          engineerId: escalateForm.engineerId || undefined,
+        }),
+      });
+      tickets = tickets.map(t => t.id === updated.id ? { ...t, ...updated } : t);
+      toast.success(`Ticket escalated to ${escalateForm.level}`);
+      escalateTarget = null;
+    } catch (err) {
+      toast.error(`Failed: ${(err as Error).message}`);
+    } finally {
+      escalating = false;
+    }
+  }
+
+  // ── Categories (lazy) ─────────────────────────────────────────────────────
+
+  async function ensureCategories() {
+    if (categories.length > 0) {
+      if (!categories.some((c) => c.id === form.categoryId)) form.categoryId = categories[0]?.id ?? '';
+      return;
+    }
+    try {
+      categories = await fetchTicketCategories();
+      form.categoryId = categories[0]?.id ?? '';
+    } catch {
+      categories = [];
+      form.categoryId = '';
+      toast.error('Failed to load call types');
+    }
+  }
+
+  $effect(() => {
+    const cid = form.customerId;
+    if (!cid) { formProjects = []; form.projectId = ''; form.categoryId = ''; return; }
+    formProjects = projects.filter((p) => p.customerId === cid);
+    if (!formProjects.some((p) => p.id === form.projectId)) form.projectId = formProjects[0]?.id ?? '';
+  });
+
+  $effect(() => {
+    if (!showCreate || !form.projectId) { if (!form.projectId) form.categoryId = ''; return; }
+    void ensureCategories();
+  });
+
   // ── Helpers ───────────────────────────────────────────────────────────────
+
+  function projectName(id: string) {
+    if (!id) return '—';
+    return projects.find((p) => p.id === id)?.name ?? '—';
+  }
+
+  function normalizeStatus(status: string) {
+    return status?.toLowerCase().replace(/\s+/g, '_') ?? '';
+  }
+
+  function displayStatus(status: string) {
+    const map: Record<string, string> = {
+      open: 'Open', assigned: 'Assigned', in_progress: 'In Progress',
+      pending_validation: 'Pending Validation', resolved: 'Resolved',
+      closed: 'Closed', rejected: 'Rejected', cancelled: 'Cancelled',
+    };
+    return map[normalizeStatus(status)] ?? status ?? '—';
+  }
 
   function statusBadge(status: string) {
     const map: Record<string, string> = {
-      'Open': 'bg-blue-50 text-blue-600',
-      'In Progress': 'bg-amber-50 text-amber-600',
-      'Pending Validation': 'bg-purple-50 text-purple-700',
-      'Resolved': 'bg-green-50 text-green-600',
-      'Closed': 'bg-gray-100 text-gray-500',
-      'Cancelled': 'bg-red-50 text-red-500',
+      open: 'bg-blue-50 text-blue-600',
+      assigned: 'bg-indigo-50 text-indigo-600',
+      in_progress: 'bg-amber-50 text-amber-600',
+      pending_validation: 'bg-purple-50 text-purple-700',
+      resolved: 'bg-green-50 text-green-600',
+      closed: 'bg-gray-100 text-gray-500',
+      rejected: 'bg-rose-50 text-rose-600',
+      cancelled: 'bg-red-50 text-red-500',
     };
-    return map[status] ?? 'bg-gray-100 text-gray-500';
+    return map[normalizeStatus(status)] ?? 'bg-gray-100 text-gray-500';
   }
 
   function priorityBadge(p: string) {
-    if (p === 'High') return 'bg-red-50 text-red-500';
-    if (p === 'Medium') return 'bg-amber-50 text-amber-500';
+    if (p === 'Critical') return 'bg-red-100 text-red-700';
+    if (p === 'High')     return 'bg-red-50 text-red-500';
+    if (p === 'Medium')   return 'bg-amber-50 text-amber-500';
     return 'bg-green-50 text-green-600';
   }
 
@@ -57,39 +288,42 @@
   }
 
   function canAct(t: Ticket) {
-    return !['Closed', 'Cancelled'].includes(t.status);
+    return !['closed', 'cancelled', 'rejected'].includes(normalizeStatus(t.status));
   }
 
-  // ── Action modal ──────────────────────────────────────────────────────────
+  function canAssign(t: Ticket) {
+    return ['open', 'assigned'].includes(normalizeStatus(t.status));
+  }
+
+  function canEscalate(t: Ticket) {
+    return !['closed', 'cancelled', 'rejected', 'resolved'].includes(normalizeStatus(t.status));
+  }
+
+  // ── Action modal (approve / close) ────────────────────────────────────────
 
   function openApprove(ticket: Ticket) {
-    actionTicket = ticket;
-    actionType = 'approve';
-    actionRemarks = '';
+    actionTicket = ticket; actionType = 'approve';
+    actionRemarks = ''; actionEligibility = null; checklistRefreshKey += 1;
   }
 
   function openClose(ticket: Ticket) {
-    actionTicket = ticket;
-    actionType = 'close';
-    actionRemarks = '';
+    actionTicket = ticket; actionType = 'close';
+    actionRemarks = ''; actionEligibility = null; checklistRefreshKey += 1;
   }
 
   async function saveAction() {
     if (!actionTicket) return;
+    if (!actionEligibility?.eligible) {
+      toast.error('Complete the closure checklist before closing this ticket'); return;
+    }
     actioning = true;
-    const newStatus = 'Closed';
-    const defaultRemarks =
-      actionType === 'approve'
-        ? 'Validated and approved — ticket closed'
-        : 'Closed by NOC';
+    const defaultRemarks = actionType === 'approve' ? 'Validated and approved — ticket closed' : 'Closed by NOC';
     try {
       await createTicketHistory({
-        ticketId: actionTicket.id,
-        status: newStatus,
-        remarks: actionRemarks.trim() || defaultRemarks,
-        author: user?.id ?? 'noc',
+        ticketId: actionTicket.id, status: 'Closed',
+        remarks: actionRemarks.trim() || defaultRemarks, author: user?.id ?? 'noc',
       });
-      const updated = await updateTicket({ id: actionTicket.id, status: newStatus });
+      const updated = await updateTicketStatus(actionTicket.id, 'closed', actionRemarks.trim() || defaultRemarks);
       tickets = tickets.map((t) => (t.id === updated.id ? { ...t, ...updated } : t));
       toast.success(actionType === 'approve' ? 'Ticket approved and closed' : 'Ticket closed');
       actionTicket = null;
@@ -100,8 +334,77 @@
     }
   }
 
-  const fieldClass =
-    'px-3.5 py-2.5 border border-gray-200 rounded-lg text-[13px] text-gray-700 outline-none focus:border-[#0B182A] transition-colors w-full bg-white';
+  async function handleValidateResolution(ticket: Ticket) {
+    validatingTicketId = ticket.id;
+    try {
+      await validateTicket(ticket.id, 'Validated by NOC');
+      checklistRefreshKey += 1;
+      toast.success('NOC validation completed');
+    } catch (err) {
+      toast.error(`Validation failed: ${(err as Error).message}`);
+    } finally {
+      validatingTicketId = null;
+    }
+  }
+
+  // ── Create ticket (manual) ────────────────────────────────────────────────
+
+  function openCreate() {
+    form = { customerId: '', projectId: '', categoryId: '', title: '', description: '', priority: 'Medium', state: '', city: '', address: '' };
+    formProjects = []; formErrors = {}; showCreate = true;
+  }
+
+  function validateCreate(): boolean {
+    formErrors = {};
+    if (!form.customerId)   formErrors.customerId  = 'Please select a customer';
+    if (!form.projectId)    formErrors.projectId   = 'Please select a project';
+    if (!form.categoryId)   formErrors.categoryId  = 'Please select a call type';
+    if (!form.title.trim()) formErrors.title       = 'Issue title is required';
+    return Object.keys(formErrors).length === 0;
+  }
+
+  async function handleCreate(e: Event) {
+    e.preventDefault();
+    if (!validateCreate()) return;
+    submitting = true;
+    try {
+      const created = await restRequest<Ticket>('/api/tickets', {
+        method: 'POST',
+        body: JSON.stringify({
+          projectId:   form.projectId,
+          categoryId:  form.categoryId,
+          title:       form.title.trim(),
+          description: form.description.trim() || undefined,
+          priority:    form.priority,
+          state:       form.state.trim()   || undefined,
+          city:        form.city.trim()    || undefined,
+          address:     form.address.trim() || undefined,
+          source:      'manual_noc',
+        }),
+      });
+      tickets = [created, ...tickets];
+      toast.success('Ticket created successfully');
+      showCreate = false;
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 422 && err.errors?.length) {
+        const fe: Record<string, string> = {};
+        for (const e of err.errors) fe[e.field] = e.message;
+        formErrors = fe;
+        toast.error('Please fix the highlighted fields');
+      } else if (err instanceof ApiError && err.status === 403) {
+        toast.error('Unauthorized: insufficient permissions');
+      } else {
+        toast.error(`Failed to create ticket: ${(err as Error).message}`);
+      }
+    } finally {
+      submitting = false;
+    }
+  }
+
+  const fieldClass     = 'px-3.5 py-2.5 border border-gray-200 rounded-lg text-[13px] text-gray-700 outline-none focus:border-[#0B182A] transition-colors w-full bg-white';
+  const labelClass     = 'flex flex-col gap-1.5';
+  const labelTextClass = 'text-[11px] font-semibold text-gray-500 uppercase tracking-wide';
+  const errorClass     = 'text-[11px] text-red-500 mt-0.5';
 </script>
 
 <svelte:head><title>Tickets · NOC · Innoserve Techsol</title></svelte:head>
@@ -109,12 +412,13 @@
 <div class="flex flex-col gap-5">
 
   <!-- Stats -->
-  <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+  <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
     {#each [
-      { label: 'Total', value: tickets.length, color: 'text-[#0B182A]' },
-      { label: 'Pending Validation', value: tickets.filter(t => t.status === 'Pending Validation').length, color: 'text-purple-700' },
-      { label: 'Open / In Progress', value: tickets.filter(t => ['Open','In Progress'].includes(t.status)).length, color: 'text-amber-600' },
-      { label: 'Closed', value: tickets.filter(t => t.status === 'Closed').length, color: 'text-gray-500' },
+      { label: 'Total',              value: tickets.length,                                                                                         color: 'text-[#0B182A]'  },
+      { label: 'Unassigned',         value: tickets.filter(t => normalizeStatus(t.status) === 'open').length,                                       color: 'text-orange-600' },
+      { label: 'Pending Validation', value: tickets.filter(t => normalizeStatus(t.status) === 'pending_validation').length,                         color: 'text-purple-700' },
+      { label: 'Open / In Progress', value: tickets.filter(t => ['open','in_progress'].includes(normalizeStatus(t.status))).length,                 color: 'text-amber-600'  },
+      { label: 'Closed',             value: tickets.filter(t => normalizeStatus(t.status) === 'closed').length,                                     color: 'text-gray-500'   },
     ] as stat}
       <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
         <p class="text-[12px] text-gray-400 mb-1">{stat.label}</p>
@@ -123,114 +427,488 @@
     {/each}
   </div>
 
-  <!-- Table -->
-  <div class="bg-white rounded-2xl p-6 shadow">
-    <div class="flex items-center gap-3 mb-4">
-      <h3 class="text-[18px] font-semibold text-[#0B182A]">All Tickets</h3>
-      <span class="text-[12px] text-gray-500 bg-gray-100 px-3 py-1 rounded-full">{tickets.length} Total</span>
+  <!-- Table card -->
+  <div class="bg-white rounded-2xl shadow">
+
+    <!-- Card header -->
+    <div class="flex items-center justify-between gap-3 px-6 pt-5 pb-0">
+      <!-- Tab bar -->
+      <div class="flex items-center gap-0.5">
+        <button
+          onclick={() => switchTab('all')}
+          class="px-4 py-2.5 text-[13px] font-semibold rounded-t-lg border-b-2 transition-colors cursor-pointer
+                 {activeTab === 'all'
+                   ? 'border-[#E87D1F] text-[#E87D1F] bg-[#E87D1F]/5'
+                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'}"
+        >
+          All Tickets
+        </button>
+        <button
+          onclick={() => switchTab('unassigned')}
+          class="flex items-center gap-2 px-4 py-2.5 text-[13px] font-semibold rounded-t-lg border-b-2 transition-colors cursor-pointer
+                 {activeTab === 'unassigned'
+                   ? 'border-[#E87D1F] text-[#E87D1F] bg-[#E87D1F]/5'
+                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'}"
+        >
+          Unassigned
+          <span class="px-2 py-0.5 rounded-full text-[10px] font-bold
+                       {activeTab === 'unassigned'
+                         ? 'bg-orange-100 text-orange-700'
+                         : 'bg-gray-100 text-gray-500'}">
+            {activeTab === 'unassigned' ? unassigned.length : tickets.filter(t => normalizeStatus(t.status) === 'open').length}
+          </span>
+        </button>
+      </div>
+
+      <button
+        onclick={openCreate}
+        class="flex items-center gap-1.5 px-4 py-2 bg-[#E87D1F] hover:bg-[#E87D1F]/90 text-white text-[13px] font-semibold rounded-lg cursor-pointer border-none transition-colors"
+      >
+        <Icons.Plus size={14} strokeWidth={2.5} />
+        Log Ticket Manually
+      </button>
     </div>
 
-    <div class="overflow-x-auto">
-      <table class="w-full text-sm border-collapse">
-        <thead>
-          <tr class="border-b border-gray-100">
-            {#each ['TICKET', 'ISSUE', 'STATUS', 'PRIORITY', 'ESCALATION', 'DATE', 'ACTIONS'] as col}
-              <th class="text-left text-[11px] font-semibold text-gray-400 tracking-wide py-3 px-3 whitespace-nowrap">{col}</th>
-            {/each}
-          </tr>
-        </thead>
-        <tbody>
-          {#if loading}
-            <tr>
-              <td colspan="7" class="py-12 text-center text-[13px] text-gray-400">
-                <div class="flex items-center justify-center gap-2">
-                  <div class="w-4 h-4 border-2 border-gray-200 border-t-[#0B182A] rounded-full animate-spin"></div>
-                  Loading…
-                </div>
-              </td>
-            </tr>
-          {:else if tickets.length === 0}
-            <tr>
-              <td colspan="7" class="py-16 text-center">
-                <div class="flex flex-col items-center gap-2">
-                  <div class="w-12 h-12 rounded-full bg-gray-50 flex items-center justify-center">
-                    <Icons.Ticket size={22} stroke="#9ca3af" />
-                  </div>
-                  <p class="text-[13px] text-gray-400">No tickets found</p>
-                </div>
-              </td>
-            </tr>
-          {:else}
-            {#each tickets as t}
-              <tr class="border-b border-gray-50 hover:bg-gray-50/60 transition-colors
-                         {t.status === 'Pending Validation' ? 'bg-purple-50/30' : ''}">
-                <td class="py-3 px-3 text-[13px] font-semibold text-[#E87D1F] whitespace-nowrap">
-                  {t.ticketNumber || t.id.slice(0, 8)}
-                </td>
-                <td class="py-3 px-3">
-                  <p class="text-[13px] font-medium text-gray-800 max-w-[180px] truncate">{t.title}</p>
-                  {#if t.description}
-                    <p class="text-[11px] text-gray-400 max-w-[180px] truncate">{t.description}</p>
-                  {/if}
-                </td>
-                <td class="py-3 px-3">
-                  <span class="text-[11px] font-semibold px-2.5 py-1 rounded-full {statusBadge(t.status)}">
-                    {t.status || '—'}
-                  </span>
-                </td>
-                <td class="py-3 px-3">
-                  <span class="text-[11px] font-semibold px-2.5 py-1 rounded-full {priorityBadge(t.priority)}">
-                    {t.priority || '—'}
-                  </span>
-                </td>
-                <td class="py-3 px-3">
-                  {#if t.escalationLevel}
-                    <span class="text-[11px] font-semibold px-2.5 py-1 rounded-full
-                                 {t.escalationLevel === 'L3' ? 'bg-red-50 text-red-600' : 'bg-orange-50 text-orange-600'}">
-                      {t.escalationLevel}
-                    </span>
-                  {:else}
-                    <span class="text-[12px] text-gray-300">—</span>
-                  {/if}
-                </td>
-                <td class="py-3 px-3 text-[12px] text-gray-400 whitespace-nowrap">{fmtDate(t.createdAt)}</td>
-                <td class="py-3 px-3">
-                  {#if canAct(t)}
-                    <div class="flex gap-1.5 flex-wrap">
-                      <!-- Approve & Close — only when pending validation -->
-                      {#if t.status === 'Pending Validation'}
-                        <button
-                          onclick={() => openApprove(t)}
-                          title="Approve and close this ticket"
-                          class="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg bg-green-50 text-green-700 hover:bg-green-100 transition-colors cursor-pointer whitespace-nowrap"
-                        >
-                          <Icons.CheckCircle size={12} />
-                          Approve &amp; Close
-                        </button>
-                      {/if}
+    <div class="border-t border-gray-100 mt-0 px-6 py-4">
 
-                      <!-- Close Ticket — any non-closed ticket -->
-                      <button
-                        onclick={() => openClose(t)}
-                        title="Close this ticket"
-                        class="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors cursor-pointer whitespace-nowrap"
-                      >
-                        <Icons.XSquare size={12} />
-                        Close
-                      </button>
-                    </div>
-                  {:else}
-                    <span class="text-[12px] text-gray-400">{t.status}</span>
-                  {/if}
-                </td>
+      <!-- ── All Tickets Tab ─────────────────────────────────────────────── -->
+      {#if activeTab === 'all'}
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm border-collapse">
+            <thead>
+              <tr class="border-b border-gray-100">
+                {#each ['TICKET', 'PROJECT', 'ISSUE', 'STATUS', 'PRIORITY', 'ESCALATION', 'DATE', 'ACTIONS'] as col}
+                  <th class="text-left text-[11px] font-semibold text-gray-400 tracking-wide py-3 px-3 whitespace-nowrap">{col}</th>
+                {/each}
               </tr>
-            {/each}
-          {/if}
-        </tbody>
-      </table>
+            </thead>
+            <tbody>
+              {#if loading}
+                <tr>
+                  <td colspan="8" class="py-12 text-center text-[13px] text-gray-400">
+                    <div class="flex items-center justify-center gap-2">
+                      <div class="w-4 h-4 border-2 border-gray-200 border-t-[#0B182A] rounded-full animate-spin"></div>
+                      Loading…
+                    </div>
+                  </td>
+                </tr>
+              {:else if tickets.length === 0}
+                <tr>
+                  <td colspan="8" class="py-16 text-center">
+                    <div class="flex flex-col items-center gap-2">
+                      <div class="w-12 h-12 rounded-full bg-gray-50 flex items-center justify-center">
+                        <Icons.Ticket size={22} stroke="#9ca3af" />
+                      </div>
+                      <p class="text-[13px] text-gray-400">No tickets found</p>
+                    </div>
+                  </td>
+                </tr>
+              {:else}
+                {#each tickets as t}
+                  <tr class="border-b border-gray-50 hover:bg-gray-50/60 transition-colors
+                             {normalizeStatus(t.status) === 'pending_validation' ? 'bg-purple-50/30' : ''}
+                             {normalizeStatus(t.status) === 'open' ? 'bg-orange-50/20' : ''}">
+                    <td class="py-3 px-3 text-[13px] font-semibold text-[#E87D1F] whitespace-nowrap">
+                      {t.ticketNumber || t.id.slice(0, 8)}
+                    </td>
+                    <td class="py-3 px-3 text-[13px] text-gray-600 whitespace-nowrap">{projectName(t.projectId)}</td>
+                    <td class="py-3 px-3">
+                      <p class="text-[13px] font-medium text-gray-800 max-w-45 truncate">{t.title}</p>
+                      {#if t.description}
+                        <p class="text-[11px] text-gray-400 max-w-45 truncate">{t.description}</p>
+                      {/if}
+                    </td>
+                    <td class="py-3 px-3">
+                      <span class="text-[11px] font-semibold px-2.5 py-1 rounded-full {statusBadge(t.status)}">
+                        {displayStatus(t.status)}
+                      </span>
+                    </td>
+                    <td class="py-3 px-3">
+                      <span class="text-[11px] font-semibold px-2.5 py-1 rounded-full {priorityBadge(t.priority)}">
+                        {t.priority || '—'}
+                      </span>
+                    </td>
+                    <td class="py-3 px-3">
+                      {#if t.escalationLevel}
+                        <span class="text-[11px] font-semibold px-2.5 py-1 rounded-full
+                                     {t.escalationLevel === 'L3' ? 'bg-red-50 text-red-600' : 'bg-orange-50 text-orange-600'}">
+                          {t.escalationLevel}
+                        </span>
+                      {:else}
+                        <span class="text-[12px] text-gray-300">—</span>
+                      {/if}
+                    </td>
+                    <td class="py-3 px-3 text-[12px] text-gray-400 whitespace-nowrap">{fmtDate(t.createdAt)}</td>
+                    <td class="py-3 px-3">
+                      {#if canAct(t)}
+                        <div class="flex gap-1.5 flex-wrap">
+                          {#if canAssign(t)}
+                            <button
+                              onclick={() => openAssign(t)}
+                              class="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg bg-orange-50 text-orange-700 hover:bg-orange-100 transition-colors cursor-pointer whitespace-nowrap"
+                            >
+                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                              Assign
+                            </button>
+                          {/if}
+                          {#if canEscalate(t)}
+                            <button
+                              onclick={() => openEscalate(t)}
+                              class="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 transition-colors cursor-pointer whitespace-nowrap"
+                            >
+                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 11 21 7 17 3"/><line x1="21" y1="7" x2="9" y2="7"/><polyline points="7 21 3 17 7 13"/><line x1="15" y1="17" x2="3" y2="17"/></svg>
+                              Escalate
+                            </button>
+                          {/if}
+                          {#if normalizeStatus(t.status) === 'resolved'}
+                            <button
+                              onclick={() => handleValidateResolution(t)}
+                              disabled={validatingTicketId === t.id}
+                              class="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors cursor-pointer whitespace-nowrap disabled:opacity-60"
+                            >
+                              <Icons.CheckCircle size={12} />
+                              {validatingTicketId === t.id ? 'Validating…' : 'Validate'}
+                            </button>
+                          {/if}
+                          {#if normalizeStatus(t.status) === 'pending_validation'}
+                            <button
+                              onclick={() => openApprove(t)}
+                              class="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg bg-green-50 text-green-700 hover:bg-green-100 transition-colors cursor-pointer whitespace-nowrap"
+                            >
+                              <Icons.CheckCircle size={12} />
+                              Approve &amp; Close
+                            </button>
+                          {/if}
+                          <button
+                            onclick={() => openClose(t)}
+                            class="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors cursor-pointer whitespace-nowrap"
+                          >
+                            <Icons.XSquare size={12} />
+                            Close
+                          </button>
+                        </div>
+                      {:else}
+                        <span class="text-[12px] text-gray-400">{displayStatus(t.status)}</span>
+                      {/if}
+                    </td>
+                  </tr>
+                {/each}
+              {/if}
+            </tbody>
+          </table>
+        </div>
+
+      <!-- ── Unassigned Tab ──────────────────────────────────────────────── -->
+      {:else}
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm border-collapse">
+            <thead>
+              <tr class="border-b border-gray-100">
+                {#each ['TICKET', 'PROJECT', 'CATEGORY', 'PRIORITY', 'RAISED AT', 'SLA DEADLINE', 'ACTIONS'] as col}
+                  <th class="text-left text-[11px] font-semibold text-gray-400 tracking-wide py-3 px-3 whitespace-nowrap">{col}</th>
+                {/each}
+              </tr>
+            </thead>
+            <tbody>
+              {#if loadingUnassigned}
+                <tr>
+                  <td colspan="7" class="py-12 text-center text-[13px] text-gray-400">
+                    <div class="flex items-center justify-center gap-2">
+                      <div class="w-4 h-4 border-2 border-gray-200 border-t-orange-500 rounded-full animate-spin"></div>
+                      Loading unassigned tickets…
+                    </div>
+                  </td>
+                </tr>
+              {:else if unassigned.length === 0}
+                <tr>
+                  <td colspan="7" class="py-16 text-center">
+                    <div class="flex flex-col items-center gap-2">
+                      <div class="w-12 h-12 rounded-full bg-green-50 flex items-center justify-center">
+                        <Icons.CheckCircle size={22} stroke="#16a34a" />
+                      </div>
+                      <p class="text-[13px] text-gray-400">All tickets are assigned</p>
+                    </div>
+                  </td>
+                </tr>
+              {:else}
+                {#each unassigned as t}
+                  {@const tAny = t as any}
+                  <tr class="border-b border-orange-50 hover:bg-orange-50/40 transition-colors bg-orange-50/20">
+                    <td class="py-3 px-3">
+                      <p class="text-[13px] font-semibold text-[#E87D1F] whitespace-nowrap">
+                        {t.ticketNumber || t.id.slice(0, 8)}
+                      </p>
+                      <p class="text-[11px] text-gray-400 max-w-40 truncate">{t.title}</p>
+                    </td>
+                    <td class="py-3 px-3 text-[13px] text-gray-600 whitespace-nowrap">{projectName(t.projectId)}</td>
+                    <td class="py-3 px-3 text-[13px] text-gray-600">{tAny.categoryName ?? tAny.category ?? '—'}</td>
+                    <td class="py-3 px-3">
+                      <span class="text-[11px] font-semibold px-2.5 py-1 rounded-full {priorityBadge(t.priority)}">
+                        {t.priority || '—'}
+                      </span>
+                    </td>
+                    <td class="py-3 px-3 text-[12px] text-gray-400 whitespace-nowrap">{fmtDate(t.createdAt)}</td>
+                    <td class="py-3 px-3">
+                      {#if tAny.slaDeadline}
+                        {@const overdue = new Date(tAny.slaDeadline) < new Date()}
+                        <span class="text-[12px] font-semibold whitespace-nowrap {overdue ? 'text-red-600' : 'text-gray-600'}">
+                          {fmtDate(tAny.slaDeadline)}
+                          {#if overdue}<span class="ml-1 text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full">Overdue</span>{/if}
+                        </span>
+                      {:else}
+                        <span class="text-[12px] text-gray-400">—</span>
+                      {/if}
+                    </td>
+                    <td class="py-3 px-3">
+                      <button
+                        onclick={() => openAssign(t)}
+                        class="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold rounded-lg bg-orange-600 text-white hover:bg-orange-700 transition-colors cursor-pointer whitespace-nowrap"
+                      >
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                        Assign Now
+                      </button>
+                    </td>
+                  </tr>
+                {/each}
+              {/if}
+            </tbody>
+          </table>
+        </div>
+      {/if}
+
     </div>
   </div>
 </div>
+
+<!-- ── Assignment Panel ────────────────────────────────────────────────────── -->
+{#if assignTarget}
+  <!-- svelte-ignore a11y_interactive_supports_focus -->
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <div
+    class="fixed inset-0 z-50 flex items-end sm:items-center justify-end p-0 sm:p-4 bg-black/50"
+    role="presentation"
+    onclick={() => (assignTarget = null)}
+  >
+    <div
+      class="bg-white w-full sm:w-105 sm:rounded-2xl shadow-2xl flex flex-col max-h-[90vh] sm:max-h-[calc(100vh-4rem)]"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Assign Ticket"
+      onclick={(e) => e.stopPropagation()}
+    >
+      <!-- Header -->
+      <div class="flex items-start justify-between px-6 py-4 border-b border-gray-100 shrink-0">
+        <div>
+          <p class="text-[11px] font-semibold text-[#E87D1F] mb-0.5">
+            {assignTarget.ticketNumber || assignTarget.id.slice(0, 8)}
+          </p>
+          <h2 class="text-[15px] font-semibold text-[#0B182A]">Assign Ticket</h2>
+          <p class="text-[12px] text-gray-400 mt-0.5 max-w-70 truncate">{assignTarget.title}</p>
+        </div>
+        <button
+          onclick={() => (assignTarget = null)}
+          class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 transition-colors shrink-0"
+          aria-label="Close"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <!-- Body -->
+      <div class="px-6 py-5 flex flex-col gap-5 overflow-y-auto">
+
+        <!-- Current assignees (if any) -->
+        {@const tAny = assignTarget as any}
+        {#if tAny.engineerName || tAny.statePlannerName}
+          <div class="px-4 py-3 rounded-xl bg-blue-50 border border-blue-100">
+            <p class="text-[11px] font-semibold text-blue-700 mb-2">Current Assignees</p>
+            <div class="flex flex-col gap-1">
+              {#if tAny.engineerName}
+                <div class="flex items-center gap-2">
+                  <span class="text-[10px] font-semibold text-blue-500 uppercase tracking-wide w-20 shrink-0">Engineer</span>
+                  <span class="text-[13px] text-blue-800 font-medium">{tAny.engineerName}</span>
+                </div>
+              {/if}
+              {#if tAny.statePlannerName}
+                <div class="flex items-center gap-2">
+                  <span class="text-[10px] font-semibold text-blue-500 uppercase tracking-wide w-20 shrink-0">Planner</span>
+                  <span class="text-[13px] text-blue-800 font-medium">{tAny.statePlannerName}</span>
+                </div>
+              {/if}
+            </div>
+          </div>
+        {/if}
+
+        {#if loadingAssignees}
+          <div class="flex items-center justify-center gap-2 py-6 text-[13px] text-gray-400">
+            <div class="w-4 h-4 border-2 border-gray-200 border-t-orange-500 rounded-full animate-spin"></div>
+            Loading available users…
+          </div>
+        {:else}
+          <!-- State Planner -->
+          <label class={labelClass}>
+            <span class={labelTextClass}>State Planner</span>
+            {#if assignPlanners.length === 0}
+              <div class="px-3.5 py-2.5 border border-gray-200 rounded-lg text-[13px] text-gray-400 bg-gray-50">
+                No state planners available for this region
+              </div>
+            {:else}
+              <select class={fieldClass} bind:value={assignForm.statePlannerId}>
+                <option value="">— None —</option>
+                {#each assignPlanners as p}
+                  <option value={p.id}>{p.name}</option>
+                {/each}
+              </select>
+            {/if}
+          </label>
+
+          <!-- Site Engineer -->
+          <label class={labelClass}>
+            <span class={labelTextClass}>Site Engineer</span>
+            {#if assignEngineers.length === 0}
+              <div class="px-3.5 py-2.5 border border-gray-200 rounded-lg text-[13px] text-gray-400 bg-gray-50">
+                No engineers available for this region
+              </div>
+            {:else}
+              <select class={fieldClass} bind:value={assignForm.engineerId}>
+                <option value="">— None —</option>
+                {#each assignEngineers as e}
+                  <option value={e.id}>{e.name}</option>
+                {/each}
+              </select>
+            {/if}
+          </label>
+        {/if}
+      </div>
+
+      <!-- Footer -->
+      <div class="flex justify-end gap-3 px-6 pb-5 pt-4 border-t border-gray-100 shrink-0">
+        <button
+          onclick={() => (assignTarget = null)}
+          class="px-5 py-2.5 text-[13px] text-gray-600 border border-gray-200 rounded-lg hover:border-gray-400 transition-colors cursor-pointer"
+        >
+          Cancel
+        </button>
+        <button
+          onclick={submitAssign}
+          disabled={assigning || loadingAssignees}
+          class="px-5 py-2.5 text-[13px] font-semibold text-white bg-orange-600 hover:bg-orange-700 rounded-lg transition-colors disabled:opacity-60 cursor-pointer"
+        >
+          {assigning ? 'Assigning…' : 'Assign Ticket'}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- ── Escalation Modal ────────────────────────────────────────────────────── -->
+{#if escalateTarget}
+  <!-- svelte-ignore a11y_interactive_supports_focus -->
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+    role="presentation"
+    onclick={() => (escalateTarget = null)}
+  >
+    <div
+      class="bg-white rounded-2xl w-full max-w-md shadow-2xl flex flex-col max-h-[calc(100vh-4rem)]"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Escalate Ticket"
+      onclick={(e) => e.stopPropagation()}
+    >
+      <!-- Header -->
+      <div class="flex items-start justify-between px-6 py-4 border-b border-gray-100 shrink-0">
+        <div>
+          <p class="text-[11px] font-semibold text-[#E87D1F] mb-0.5">
+            {escalateTarget.ticketNumber || escalateTarget.id.slice(0, 8)}
+          </p>
+          <h2 class="text-[15px] font-semibold text-[#0B182A]">Escalate Ticket</h2>
+          <p class="text-[12px] text-gray-400 mt-0.5 max-w-70 truncate">{escalateTarget.title}</p>
+        </div>
+        <button
+          onclick={() => (escalateTarget = null)}
+          class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 transition-colors shrink-0"
+          aria-label="Close"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <!-- Body -->
+      <div class="px-6 py-5 flex flex-col gap-4 overflow-y-auto">
+
+        <!-- Level -->
+        <label class={labelClass}>
+          <span class={labelTextClass}>Escalation Level <span class="text-red-400">*</span></span>
+          <select class={fieldClass} bind:value={escalateForm.level}>
+            <option value="L2">L2 — Second Level Support</option>
+            <option value="L3">L3 — Third Level / Engineering</option>
+            <option value="Vendor">Vendor Escalation</option>
+          </select>
+        </label>
+
+        <!-- Assigned Engineer (filtered by level) -->
+        <label class={labelClass}>
+          <span class={labelTextClass}>Assign to Engineer</span>
+          {#if loadingEscalateUsers}
+            <div class="px-3.5 py-2.5 border border-gray-200 rounded-lg text-[13px] text-gray-400 bg-gray-50">
+              Loading engineers…
+            </div>
+          {:else if filteredEscalateUsers.length === 0 && escalateForm.level !== 'Vendor'}
+            <div class="px-4 py-3 rounded-lg bg-amber-50 border border-amber-200 text-[13px] text-amber-700">
+              No {escalateForm.level} engineers available
+            </div>
+          {:else}
+            <select class={fieldClass} bind:value={escalateForm.engineerId}>
+              <option value="">— None / Auto-assign —</option>
+              {#each filteredEscalateUsers as u}
+                <option value={u.id}>{u.name}</option>
+              {/each}
+            </select>
+          {/if}
+        </label>
+
+        <!-- Reason -->
+        <label class={labelClass}>
+          <span class={labelTextClass}>Reason <span class="text-red-400">*</span></span>
+          <textarea
+            rows="4"
+            placeholder="Describe why this ticket needs escalation…"
+            class="{fieldClass} resize-none {escalateErrors.reason ? 'border-red-300' : ''}"
+            bind:value={escalateForm.reason}
+          ></textarea>
+          {#if escalateErrors.reason}<span class={errorClass}>{escalateErrors.reason}</span>{/if}
+        </label>
+
+        <!-- Warning banner -->
+        <div class="flex items-start gap-3 px-4 py-3 rounded-xl bg-rose-50 border border-rose-100">
+          <svg class="shrink-0 mt-0.5" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e11d48" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <p class="text-[12px] text-rose-700 leading-relaxed">
+            Escalating to <strong>{escalateForm.level}</strong> will notify the assigned team and flag this ticket as a priority item.
+          </p>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="flex justify-end gap-3 px-6 pb-5 pt-4 border-t border-gray-100 shrink-0">
+        <button
+          onclick={() => (escalateTarget = null)}
+          class="px-5 py-2.5 text-[13px] text-gray-600 border border-gray-200 rounded-lg hover:border-gray-400 transition-colors cursor-pointer"
+        >
+          Cancel
+        </button>
+        <button
+          onclick={submitEscalate}
+          disabled={escalating}
+          class="px-5 py-2.5 text-[13px] font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition-colors disabled:opacity-60 cursor-pointer"
+        >
+          {escalating ? 'Escalating…' : `Escalate to ${escalateForm.level}`}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <!-- ── Action Modal (Approve & Close / Close Ticket) ──────────────────────── -->
 {#if actionTicket}
@@ -242,19 +920,19 @@
     onclick={() => (actionTicket = null)}
   >
     <div
-      class="bg-white rounded-2xl w-full max-w-sm shadow-2xl"
+      class="bg-white rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[calc(100vh-4rem)]"
       role="dialog"
       aria-modal="true"
       tabindex="-1"
       aria-label={actionType === 'approve' ? 'Approve & Close Ticket' : 'Close Ticket'}
       onclick={(e) => e.stopPropagation()}
     >
-      <div class="flex items-start justify-between px-6 py-4 border-b border-gray-100">
+      <div class="flex items-start justify-between px-6 py-4 border-b border-gray-100 shrink-0">
         <div>
           <p class="text-[11px] font-semibold text-[#E87D1F] mb-0.5">
             {actionTicket.ticketNumber || actionTicket.id.slice(0, 8)}
           </p>
-          <h2 class="text-[15px] font-semibold text-[#0B182A] leading-tight max-w-[220px]">
+          <h2 class="text-[15px] font-semibold text-[#0B182A] leading-tight max-w-70">
             {actionType === 'approve' ? 'Approve & Close Ticket' : 'Close Ticket'}
           </h2>
           <p class="text-[12px] text-gray-400 mt-0.5">
@@ -274,7 +952,23 @@
         </button>
       </div>
 
-      <div class="px-6 py-5 flex flex-col gap-4">
+      <div class="px-6 py-5 flex flex-col gap-4 overflow-y-auto">
+        {#if ['resolved', 'pending_validation'].includes(normalizeStatus(actionTicket.status))}
+          <RcaSection
+            ticketId={actionTicket.id}
+            ticketStatus={actionTicket.status}
+            role={user?.role ?? ''}
+            onRcaSaved={() => { checklistRefreshKey++; }}
+          />
+          <div class="border-t border-gray-100"></div>
+        {/if}
+
+        <ClosureChecklist
+          ticketId={actionTicket.id}
+          refreshKey={checklistRefreshKey}
+          onLoaded={(value) => { actionEligibility = value; }}
+        />
+
         {#if actionType === 'approve'}
           <div class="flex items-start gap-3 px-4 py-3 rounded-xl bg-green-50 border border-green-100">
             <Icons.CheckCircle size={16} stroke="#16a34a" />
@@ -302,26 +996,179 @@
         </label>
       </div>
 
-      <div class="flex justify-end gap-3 px-6 pb-5 border-t border-gray-100 pt-4">
+      <div class="flex justify-end gap-3 px-6 pb-5 border-t border-gray-100 pt-4 shrink-0">
         <button
           onclick={() => (actionTicket = null)}
           class="px-5 py-2.5 text-[13px] text-gray-600 border border-gray-200 rounded-lg hover:border-gray-400 transition-colors cursor-pointer"
         >
           Cancel
         </button>
+        {#if actionEligibility?.eligible}
+          <button
+            onclick={saveAction}
+            disabled={actioning}
+            class="px-5 py-2.5 text-[13px] font-semibold text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-60 cursor-pointer
+                   {actionType === 'approve' ? 'bg-green-600' : 'bg-[linear-gradient(to_bottom,#0B182A,#021E44)]'}"
+          >
+            {actioning ? 'Saving…' : actionType === 'approve' ? 'Approve & Close' : 'Close Ticket'}
+          </button>
+        {/if}
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- ── Log Ticket Manually Modal ───────────────────────────────────────────── -->
+{#if showCreate}
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+    role="presentation"
+    onclick={() => (showCreate = false)}
+  >
+    <div
+      class="bg-white rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] flex flex-col"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Log Ticket Manually"
+      onclick={(e) => e.stopPropagation()}
+    >
+      <!-- Header -->
+      <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
+        <div>
+          <h2 class="text-[16px] font-semibold text-[#0B182A]">Log Ticket Manually</h2>
+          <p class="text-[12px] text-gray-400 mt-0.5">Raise a ticket on behalf of a customer · source: NOC</p>
+        </div>
         <button
-          onclick={saveAction}
-          disabled={actioning}
-          class="px-5 py-2.5 text-[13px] font-semibold text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-60 cursor-pointer
-                 {actionType === 'approve' ? 'bg-green-600' : 'bg-[linear-gradient(to_bottom,#0B182A,#021E44)]'}"
+          onclick={() => (showCreate = false)}
+          class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+          aria-label="Close"
         >
-          {actioning
-            ? 'Saving…'
-            : actionType === 'approve'
-              ? 'Approve & Close'
-              : 'Close Ticket'}
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
         </button>
       </div>
+
+      <!-- Form -->
+      <form class="px-6 py-5 flex flex-col gap-4 overflow-y-auto" onsubmit={handleCreate} novalidate>
+
+        <!-- Customer -->
+        <label class={labelClass}>
+          <span class={labelTextClass}>Customer <span class="text-red-400">*</span></span>
+          <select class={fieldClass} bind:value={form.customerId}>
+            <option value="">— Select Customer —</option>
+            {#each customers as c}
+              <option value={c.id}>{c.companyName}</option>
+            {/each}
+          </select>
+          {#if formErrors.customerId}<span class={errorClass}>{formErrors.customerId}</span>{/if}
+        </label>
+
+        <!-- Project -->
+        <label class={labelClass}>
+          <span class={labelTextClass}>Project <span class="text-red-400">*</span></span>
+          {#if !form.customerId}
+            <div class="px-3.5 py-2.5 border border-gray-200 rounded-lg text-[13px] text-gray-400 bg-gray-50">Select a customer first</div>
+          {:else if formProjects.length === 0}
+            <div class="px-4 py-3 rounded-lg bg-amber-50 border border-amber-200 text-[13px] text-amber-700">No projects found for this customer</div>
+          {:else if formProjects.length === 1}
+            <div class="px-3.5 py-2.5 border border-gray-200 rounded-lg text-[13px] text-gray-700 bg-gray-50">{formProjects[0].name}</div>
+          {:else}
+            <select class={fieldClass} bind:value={form.projectId}>
+              {#each formProjects as p}
+                <option value={p.id}>{p.name}</option>
+              {/each}
+            </select>
+          {/if}
+          {#if formErrors.projectId}<span class={errorClass}>{formErrors.projectId}</span>{/if}
+        </label>
+
+        <!-- Call Type -->
+        <label class={labelClass}>
+          <span class={labelTextClass}>Call Type <span class="text-red-400">*</span></span>
+          {#if !form.projectId}
+            <div class="px-3.5 py-2.5 border border-gray-200 rounded-lg text-[13px] text-gray-400 bg-gray-50">Select a project first</div>
+          {:else if categories.length === 0}
+            <div class="px-4 py-3 rounded-lg bg-amber-50 border border-amber-200 text-[13px] text-amber-700">No call types available</div>
+          {:else}
+            <select class={fieldClass} bind:value={form.categoryId}>
+              {#each categories as c}
+                <option value={c.id}>{c.name}</option>
+              {/each}
+            </select>
+          {/if}
+          {#if formErrors.categoryId}<span class={errorClass}>{formErrors.categoryId}</span>{/if}
+        </label>
+
+        <!-- Title -->
+        <label class={labelClass}>
+          <span class={labelTextClass}>Issue Title <span class="text-red-400">*</span></span>
+          <input
+            type="text"
+            placeholder="e.g. ATM not dispensing cash"
+            class="{fieldClass} {formErrors.title ? 'border-red-300' : ''}"
+            bind:value={form.title}
+          />
+          {#if formErrors.title}<span class={errorClass}>{formErrors.title}</span>{/if}
+        </label>
+
+        <!-- Description -->
+        <label class={labelClass}>
+          <span class={labelTextClass}>Description</span>
+          <textarea
+            placeholder="Describe the problem in detail…"
+            rows="3"
+            class="{fieldClass} resize-none"
+            bind:value={form.description}
+          ></textarea>
+        </label>
+
+        <!-- Priority -->
+        <label class={labelClass}>
+          <span class={labelTextClass}>Priority</span>
+          <select class={fieldClass} bind:value={form.priority}>
+            <option value="Low">Low</option>
+            <option value="Medium">Medium</option>
+            <option value="High">High</option>
+            <option value="Critical">Critical</option>
+          </select>
+        </label>
+
+        <!-- Location -->
+        <div class="grid grid-cols-2 gap-4">
+          <label class={labelClass}>
+            <span class={labelTextClass}>State</span>
+            <input type="text" placeholder="e.g. Kerala" class={fieldClass} bind:value={form.state} />
+          </label>
+          <label class={labelClass}>
+            <span class={labelTextClass}>City</span>
+            <input type="text" placeholder="e.g. Kochi" class={fieldClass} bind:value={form.city} />
+          </label>
+        </div>
+
+        <label class={labelClass}>
+          <span class={labelTextClass}>Address / Branch</span>
+          <input type="text" placeholder="Branch address or landmark" class={fieldClass} bind:value={form.address} />
+        </label>
+
+        <!-- Footer -->
+        <div class="flex justify-end gap-3 pt-2 border-t border-gray-100 mt-1">
+          <button
+            type="button"
+            onclick={() => (showCreate = false)}
+            class="px-5 py-2.5 text-[13px] text-gray-600 border border-gray-200 rounded-lg hover:border-gray-400 transition-colors cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={submitting || categories.length === 0}
+            class="px-5 py-2.5 text-[13px] font-semibold text-white bg-[#E87D1F] hover:bg-[#d06a10] rounded-lg transition-colors disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed"
+          >
+            {submitting ? 'Creating…' : 'Log Ticket'}
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 {/if}

@@ -1,6 +1,13 @@
 import { restRequest } from "$lib/api/rest";
 import { invalidate } from "$lib/stores/query";
 import type { Ticket, TicketHistory, Attachment, TicketCategory } from "./queries";
+import {
+  assignTicket as assignTicketRequest,
+  escalateTicket as escalateTicketRequest,
+  updateTicketStatus,
+  type EscalateTicketInput as ApiEscalateTicketInput,
+} from "$lib/api/tickets";
+import type { TicketStatus } from "$lib/config/roles";
 
 // ── Input Types ─────────────────────────────────────────────────────────────
 
@@ -26,11 +33,9 @@ export interface CreateTicketInput {
 
 export interface UpdateTicketInput {
   id: string;
-  status?: string;
-  priority?: string;
+  status?: TicketStatus;
   assignedEngineerId?: string;
   statePlannerId?: string;
-  escalationLevel?: string;
 }
 
 export interface CreateTicketHistoryInput {
@@ -65,13 +70,16 @@ export async function createTicket(input: CreateTicketInput): Promise<Ticket> {
 }
 
 export async function updateTicket(input: UpdateTicketInput): Promise<Ticket> {
-  const { id, ...body } = input;
-  const result = await restRequest<Ticket>(`/api/tickets/${id}`, {
-    method: 'PATCH',
-    body: JSON.stringify(body),
+  const { id, status, assignedEngineerId, statePlannerId } = input;
+
+  if (status) {
+    return updateTicketStatus(id, status);
+  }
+
+  return assignTicketRequest(id, {
+    engineerId: assignedEngineerId,
+    statePlannerId,
   });
-  invalidate('tickets');
-  return result;
 }
 
 export async function createTicketHistory(input: CreateTicketHistoryInput): Promise<TicketHistory> {
@@ -95,5 +103,20 @@ export async function createTicketCategory(
   return restRequest<TicketCategory>('/api/ticket-categories', {
     method: 'POST',
     body: JSON.stringify(input),
+  });
+}
+
+export interface EscalateTicketInput {
+  id: string;
+  escalationLevel: ApiEscalateTicketInput['level'];
+  reason?: string;
+  engineerId?: string;
+}
+
+export async function escalateTicket(input: EscalateTicketInput): Promise<Ticket> {
+  return escalateTicketRequest(input.id, {
+    level: input.escalationLevel,
+    reason: input.reason ?? `Support requested: ${input.escalationLevel}`,
+    engineerId: input.engineerId,
   });
 }

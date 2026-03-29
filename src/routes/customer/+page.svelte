@@ -1,6 +1,27 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { authStore } from '$lib/stores/auth';
+	import type { Ticket } from '$lib/modules/data/tickets/queries';
+
 	const user = $derived($authStore.user);
+
+	let tickets = $state<Ticket[]>([]);
+	let loading = $state(true);
+
+	onMount(async () => {
+		try {
+			const res = await fetch('/api/tickets');
+			if (res.ok) tickets = await res.json();
+		} catch {
+			// non-critical — stats stay as '—'
+		} finally {
+			loading = false;
+		}
+	});
+
+	const open = $derived(tickets.filter(t => t.status?.toLowerCase() === 'open').length);
+	const inProgress = $derived(tickets.filter(t => t.status?.toLowerCase().replace(/ /g, '_') === 'in_progress').length);
+	const resolved = $derived(tickets.filter(t => t.status?.toLowerCase() === 'resolved').length);
 </script>
 
 <svelte:head><title>Customer · Innoserve Techsol</title></svelte:head>
@@ -15,9 +36,9 @@
 
 	<div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
 		{#each [
-			{ label: 'Open Tickets', value: '—', color: 'text-blue-700' },
-			{ label: 'In Progress', value: '—', color: 'text-amber-600' },
-			{ label: 'Resolved', value: '—', color: 'text-emerald-700' }
+			{ label: 'Open Tickets', value: loading ? '—' : open, color: 'text-blue-700' },
+			{ label: 'In Progress', value: loading ? '—' : inProgress, color: 'text-amber-600' },
+			{ label: 'Resolved', value: loading ? '—' : resolved, color: 'text-emerald-700' }
 		] as stat}
 			<div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
 				<p class="text-[13px] text-gray-500 mb-1">{stat.label}</p>

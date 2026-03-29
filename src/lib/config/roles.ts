@@ -4,6 +4,7 @@
 
 export type Role =
   | 'super_admin'
+  | 'national_head'
   | 'customer'
   | 'engineer'
   | 'noc'
@@ -12,11 +13,16 @@ export type Role =
 
 export type TicketStatus =
   | 'open'
+  | 'assigned'
   | 'in_progress'
+  | 'on_hold'
+  | 'pending_replacement'
+  | 'escalated_l2'
+  | 'escalated_l3'
   | 'pending_validation'
   | 'resolved'
   | 'closed'
-  | 'cancelled';
+  | 'reopened';
 
 export type CustomerStatus = 'pending' | 'active' | 'rejected' | 'inactive';
 
@@ -26,6 +32,7 @@ export type EngineerDocStatus = 'pending' | 'approved' | 'rejected' | 'reupload'
 
 export const ROLE_LABELS: Record<Role, string> = {
   super_admin:  'Super Admin',
+  national_head:'National Head',
   engineer:     'Engineer',
   customer:     'Customer',
   noc:          'NOC',
@@ -35,6 +42,7 @@ export const ROLE_LABELS: Record<Role, string> = {
 
 export const ROLE_BADGE_COLORS: Record<Role, string> = {
   super_admin:  'bg-[#0B182A] text-white',
+  national_head:'bg-slate-700 text-white',
   engineer:     'bg-blue-700 text-white',
   customer:     'bg-emerald-700 text-white',
   noc:          'bg-purple-700 text-white',
@@ -46,32 +54,53 @@ export const ROLE_BADGE_COLORS: Record<Role, string> = {
 
 export const ROLE_REDIRECTS: Record<Role, string> = {
   super_admin:  '/admin',
+  national_head:'/national-head/dashboard',
   engineer:     '/engineer',
   customer:     '/customer',
   noc:          '/noc',
   state_planner:'/planner',
-  project_head: '/project',
+  project_head: '/project-head/dashboard',
 };
+
+export const ALL_TICKET_STATUSES: TicketStatus[] = [
+  'open',
+  'assigned',
+  'in_progress',
+  'on_hold',
+  'pending_replacement',
+  'escalated_l2',
+  'escalated_l3',
+  'resolved',
+  'pending_validation',
+  'closed',
+  'reopened',
+];
 
 // ── Ticket status options per role ─────────────────────────────────────────
 // Controls which statuses are visible in TicketForm dropdowns.
 
 export const ROLE_STATUS_OPTIONS: Record<Role, TicketStatus[]> = {
-  super_admin:  ['open', 'in_progress', 'pending_validation', 'resolved', 'closed', 'cancelled'],
-  state_planner:['open', 'in_progress', 'pending_validation', 'resolved', 'closed', 'cancelled'],
-  noc:          ['pending_validation', 'closed'],
+  super_admin:  ['open', 'assigned', 'in_progress', 'on_hold', 'pending_replacement', 'resolved', 'pending_validation', 'closed', 'reopened'],
+  national_head:['open', 'assigned', 'in_progress', 'on_hold', 'pending_replacement', 'resolved', 'pending_validation', 'closed', 'reopened'],
+  state_planner:['assigned'],
+  noc:          ['open', 'assigned', 'pending_validation', 'closed'],
   project_head: ['pending_validation', 'closed'],
   engineer:     ['in_progress', 'resolved'],
-  customer:     ['open', 'cancelled'],
+  customer:     ['open'],
 };
 
 export const TICKET_STATUS_LABELS: Record<TicketStatus, string> = {
   open:               'Open',
+  assigned:           'Assigned',
   in_progress:        'In Progress',
+  on_hold:            'On Hold',
+  pending_replacement:'Pending Replacement',
+  escalated_l2:       'Escalated L2',
+  escalated_l3:       'Escalated L3',
   pending_validation: 'Pending Validation',
   resolved:           'Resolved',
   closed:             'Closed',
-  cancelled:          'Cancelled',
+  reopened:           'Reopened',
 };
 
 // ── Customer status options ────────────────────────────────────────────────
@@ -114,6 +143,15 @@ export interface RolePermissions {
 
 export const ROLE_PERMISSIONS: Record<Role, RolePermissions> = {
   super_admin: {
+    canApproveCustomers: true,
+    canApproveEngineers: true,
+    canCreateTickets:    true,
+    canAssignEngineers:  true,
+    canViewAllTickets:   true,
+    canManageProjects:   true,
+    canViewReports:      true,
+  },
+  national_head: {
     canApproveCustomers: true,
     canApproveEngineers: true,
     canCreateTickets:    true,

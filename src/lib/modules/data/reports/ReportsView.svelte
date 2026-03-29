@@ -1,8 +1,14 @@
-<script>
+<script lang="ts">
   import * as Icons from "$lib/icons";
 
-  let activeTab = $state("tickets");
-  const tabs = [
+  interface Props {
+    initialTab?: "tickets" | "engineers" | "payout";
+  }
+
+  let { initialTab = "tickets" }: Props = $props();
+
+  let activeTab = $state(initialTab);
+  const tabs: Array<{ id: "tickets" | "engineers" | "payout"; label: string; count: number }> = [
     { id: "tickets", label: "Tickets Reports", count: 1250 },
     { id: "engineers", label: "Engineer Reports", count: 78 },
     { id: "payout", label: "Payout Report", count: 340 },
