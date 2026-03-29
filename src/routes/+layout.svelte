@@ -3,6 +3,8 @@
   import favicon from "$lib/assets/favicon.svg";
   import { Toaster } from "svelte-sonner";
   import { authStore } from "$lib/stores/auth";
+  import { notifications } from "$lib/stores/notifications";
+  import { fetchNotifications } from "$lib/api/notifications";
 
   let { data, children } = $props();
 
@@ -10,6 +12,15 @@
   $effect(() => {
     if (data.user) {
       authStore.setUser(data.user);
+    }
+  });
+
+  // Fetch notifications from backend and seed the store (client-side only)
+  $effect(() => {
+    if (data.user) {
+      fetchNotifications().then((items) => {
+        if (items.length > 0) notifications.seed(items);
+      });
     }
   });
 </script>
