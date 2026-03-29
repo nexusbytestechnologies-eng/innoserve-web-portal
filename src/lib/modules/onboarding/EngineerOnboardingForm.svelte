@@ -54,7 +54,6 @@
   let isSubmitting = $state(false);
   let referenceId = $state("");
   let termsAccepted = $state(false);
-  // Phone is verified before the form wizard is shown
   let phoneGateCleared = $state(false);
 
   let form = $state({
@@ -78,38 +77,164 @@
 
   let errors = $state<Record<string, string>>({});
 
+  // ── File validation helper ──────────────────────────────────────────────────
+  const ALLOWED_DOC_TYPES = ["image/jpeg", "image/png", "application/pdf"];
+  const MAX_DOC_MB = 5;
+  const MAX_PHOTO_MB = 2;
+
+  function validateFile(
+    file: File | null,
+    label: string,
+    opts: { required?: boolean; maxMB?: number; types?: string[] } = {},
+  ): string | null {
+    const {
+      required = true,
+      maxMB = MAX_DOC_MB,
+      types = ALLOWED_DOC_TYPES,
+    } = opts;
+    if (!file) return required ? `${label} is required` : null;
+    if (!types.includes(file.type))
+      return `${label}: only ${types.map((t) => t.split("/")[1].toUpperCase()).join(", ")} files are allowed`;
+    if (file.size > maxMB * 1024 * 1024)
+      return `${label}: file size must be under ${maxMB}MB`;
+    return null;
+  }
+
+  // ── Per-step validation ─────────────────────────────────────────────────────
   function validateStep(step: number): boolean {
     errors = {};
-    switch (step) {
-      case 0:
-        if (!form.fullName.trim()) errors.fullName = "Full name is required";
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email))
-          errors.email = "Enter valid email address";
-        if (!form.state) errors.state = "Please select your state";
-        if (!form.city.trim()) errors.city = "City is required";
-        if (!/^\d{6}$/.test(form.pincode))
-          errors.pincode = "Enter valid 6-digit pincode";
-        break;
-      case 1:
-        if (!form.aadhaarFile)
-          errors.aadhaarFile = "Aadhaar card upload is required";
-        if (!form.panFile) errors.panFile = "PAN card upload is required";
-        if (!form.dlFile) errors.dlFile = "Driving license upload is required";
-        break;
-      case 2:
-        if (!form.accountHolderName.trim())
-          errors.accountHolderName = "Account holder name is required";
-        if (!/^\d{9,18}$/.test(form.accountNumber))
-          errors.accountNumber = "Enter valid account number (9–18 digits)";
-        if (form.accountNumber !== form.confirmAccountNumber)
-          errors.confirmAccountNumber = "Account numbers do not match";
-        if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(form.ifsc))
-          errors.ifsc = "Enter valid IFSC code (e.g., SBIN0001234)";
-        if (!form.cancelChequeFile)
-          errors.cancelChequeFile =
-            "Cancelled cheque or passbook scan is required";
-        break;
+
+    if (step === 0) {
+      // Full Name — letters, spaces, dots, apostrophes, hyphens; 2–60 chars
+      const name = form.fullName.trim();
+      if (!name) {
+        errors.fullName = "Full name is required";
+      } else if (!/^[A-Za-z\s.\-']+$/.test(name)) {
+        errors.fullName =
+          "Name must contain only letters, spaces, dots, apostrophes or hyphens";
+      } else if (name.length < 2 || name.length > 60) {
+        errors.fullName = "Name must be between 2 and 60 characters";
+      } else if (/\s{2,}/.test(name)) {
+        errors.fullName = "Name must not contain consecutive spaces";
+      }
+
+      // Phone — 10 digits, starts with 6–9 (Indian mobile)
+      const phone = form.phone.trim();
+      if (!phone) {
+        errors.phone = "Phone number is required";
+      } else if (!/^\d+$/.test(phone)) {
+        errors.phone = "Phone number must contain only digits";
+      } else if (!/^[6-9]\d{9}$/.test(phone)) {
+        errors.phone =
+          "Enter a valid 10-digit Indian mobile number (must start with 6, 7, 8 or 9)";
+      }
+
+      // Email (already pre-filled & verified, but guard anyway)
+      const email = form.email.trim();
+      if (!email) {
+        errors.email = "Email address is required";
+      } else if (
+        !/^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/.test(email)
+      ) {
+        errors.email = "Enter a valid email address (e.g. name@example.com)";
+      }
+
+      // State
+      if (!form.state) {
+        errors.state = "Please select your state";
+      }
+
+      // City — letters, spaces, dots, hyphens; 2–50 chars
+      const city = form.city.trim();
+      if (!city) {
+        errors.city = "City is required";
+      } else if (!/^[A-Za-z\s.\-]+$/.test(city)) {
+        errors.city =
+          "City name must contain only letters, spaces, dots or hyphens";
+      } else if (city.length < 2 || city.length > 50) {
+        errors.city = "City name must be between 2 and 50 characters";
+      }
+
+      // Pincode — 6 digits, must not start with 0
+      const pin = form.pincode.trim();
+      if (!pin) {
+        errors.pincode = "Pincode is required";
+      } else if (!/^\d+$/.test(pin)) {
+        errors.pincode = "Pincode must contain only digits";
+      } else if (!/^[1-9]\d{5}$/.test(pin)) {
+        errors.pincode =
+          "Enter a valid 6-digit pincode (must not start with 0)";
+      }
+
+      // Profile photo (optional — validate only if provided)
+      if (form.profilePhoto) {
+        const photoErr = validateFile(form.profilePhoto, "Profile photo", {
+          required: false,
+          maxMB: MAX_PHOTO_MB,
+          types: ["image/jpeg", "image/png"],
+        });
+        if (photoErr) errors.profilePhoto = photoErr;
+      }
     }
+
+    if (step === 1) {
+      const aadhaarErr = validateFile(form.aadhaarFile, "Aadhaar card");
+      if (aadhaarErr) errors.aadhaarFile = aadhaarErr;
+
+      const panErr = validateFile(form.panFile, "PAN card");
+      if (panErr) errors.panFile = panErr;
+
+      const dlErr = validateFile(form.dlFile, "Driving license");
+      if (dlErr) errors.dlFile = dlErr;
+    }
+
+    if (step === 2) {
+      // Account holder name — letters, spaces, dots, apostrophes, hyphens
+      const holderName = form.accountHolderName.trim();
+      if (!holderName) {
+        errors.accountHolderName = "Account holder name is required";
+      } else if (!/^[A-Za-z\s.\-']+$/.test(holderName)) {
+        errors.accountHolderName =
+          "Name must contain only letters, spaces, dots, apostrophes or hyphens";
+      } else if (holderName.length < 2 || holderName.length > 80) {
+        errors.accountHolderName = "Name must be between 2 and 80 characters";
+      }
+
+      // Account number — digits only, 9–18 digits
+      const accNum = form.accountNumber.trim();
+      if (!accNum) {
+        errors.accountNumber = "Account number is required";
+      } else if (!/^\d+$/.test(accNum)) {
+        errors.accountNumber = "Account number must contain only digits";
+      } else if (accNum.length < 9 || accNum.length > 18) {
+        errors.accountNumber = "Account number must be between 9 and 18 digits";
+      }
+
+      // Confirm account number
+      const confirmNum = form.confirmAccountNumber.trim();
+      if (!confirmNum) {
+        errors.confirmAccountNumber = "Please confirm your account number";
+      } else if (form.accountNumber !== form.confirmAccountNumber) {
+        errors.confirmAccountNumber = "Account numbers do not match";
+      }
+
+      // IFSC — 4 uppercase letters + literal "0" + 6 uppercase alphanumeric
+      const ifsc = form.ifsc.trim();
+      if (!ifsc) {
+        errors.ifsc = "IFSC code is required";
+      } else if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc)) {
+        errors.ifsc =
+          "Enter a valid IFSC code (e.g. SBIN0001234): 4 letters, digit 0, 6 alphanumeric";
+      }
+
+      // Cancelled cheque
+      const chequeErr = validateFile(
+        form.cancelChequeFile,
+        "Cancelled cheque / passbook",
+      );
+      if (chequeErr) errors.cancelChequeFile = chequeErr;
+    }
+
     return Object.keys(errors).length === 0;
   }
 
@@ -195,7 +320,9 @@
           />
         </svg>
       </div>
-      <span class="text-[#0B182A] text-lg font-bold tracking-tight">InnoServe</span>
+      <span class="text-[#0B182A] text-lg font-bold tracking-tight"
+        >InnoServe</span
+      >
     </div>
     <h1 class="text-2xl md:text-3xl font-bold text-[#0B182A] mb-1.5">
       Engineer Onboarding
@@ -280,7 +407,9 @@
   {:else}
     <div class="max-w-3xl mx-auto">
       <!-- Step Progress -->
-      <div class="bg-white shadow-sm border border-gray-200 rounded-2xl p-4 mb-5">
+      <div
+        class="bg-white shadow-sm border border-gray-200 rounded-2xl p-4 mb-5"
+      >
         <div class="flex items-center">
           {#each STEPS as step, i}
             <div
@@ -418,7 +547,7 @@
                     type="file"
                     id="profilePhotoInput"
                     class="hidden"
-                    accept="image/*"
+                    accept="image/jpeg,image/png"
                     onchange={(e) => {
                       const f =
                         (e.target as HTMLInputElement).files?.[0] ?? null;
@@ -438,15 +567,18 @@
                   <p class="text-[11px] text-gray-400 mt-1">
                     Optional · JPG, PNG up to 2MB
                   </p>
+                  {#if errors.profilePhoto}
+                    <p class={errorClass}>{errors.profilePhoto}</p>
+                  {/if}
                 </div>
               </div>
 
               <!-- Name & Phone -->
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <label class="flex flex-col gap-1.5">
-                  <span class={labelTextClass}
-                    >Full Name <span class="text-red-400">*</span></span
-                  >
+                  <span class={labelTextClass}>
+                    Full Name <span class="text-red-400">*</span>
+                  </span>
                   <input
                     type="text"
                     bind:value={form.fullName}
@@ -454,44 +586,80 @@
                       ? 'border-red-300'
                       : ''}"
                     placeholder="Enter your full name"
+                    oninput={(e) => {
+                      // Strip digits and most special chars live while typing
+                      const el = e.target as HTMLInputElement;
+                      el.value = el.value.replace(/[^A-Za-z\s.\-']/g, "");
+                      form.fullName = el.value;
+                    }}
                   />
-                  {#if errors.fullName}<span class={errorClass}
-                      >{errors.fullName}</span
-                    >{/if}
+                  {#if errors.fullName}
+                    <span class={errorClass}>{errors.fullName}</span>
+                  {/if}
                 </label>
                 <label class="flex flex-col gap-1.5">
-                  <span class={labelTextClass}>Phone Number</span>
+                  <span class={labelTextClass}>
+                    Phone Number <span class="text-red-400">*</span>
+                  </span>
                   <div class="relative">
-                    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-[13px] font-medium select-none">+91</span>
+                    <span
+                      class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-[13px] font-medium select-none"
+                      >+91</span
+                    >
                     <input
                       type="tel"
                       bind:value={form.phone}
-                      class="{inputClass} {errors.phone ? 'border-red-300' : ''} pl-11"
+                      class="{inputClass} {errors.phone
+                        ? 'border-red-300'
+                        : ''} pl-11"
                       placeholder="9876543210"
                       maxlength="10"
+                      oninput={(e) => {
+                        const el = e.target as HTMLInputElement;
+                        el.value = el.value.replace(/\D/g, "");
+                        form.phone = el.value;
+                      }}
                     />
                   </div>
-                  {#if errors.phone}<span class={errorClass}>{errors.phone}</span>{/if}
+                  {#if errors.phone}
+                    <span class={errorClass}>{errors.phone}</span>
+                  {/if}
                 </label>
               </div>
 
-              <!-- Email -->
+              <!-- Email (pre-verified, read-only display) -->
               <div class="flex flex-col gap-1.5">
                 <span class={labelTextClass}>Email ID</span>
-                <div class="flex items-center gap-2.5 px-3.5 py-2.5 border border-green-200 bg-green-50 rounded-lg">
-                  <svg class="w-4 h-4 text-green-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+                <div
+                  class="flex items-center gap-2.5 px-3.5 py-2.5 border border-green-200 bg-green-50 rounded-lg"
+                >
+                  <svg
+                    class="w-4 h-4 text-green-500 shrink-0"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2.5"
+                      d="M5 13l4 4L19 7"
+                    />
                   </svg>
-                  <span class="text-[13px] font-medium text-green-800">{form.email}</span>
-                  <span class="ml-auto text-[11px] font-semibold text-green-600 bg-green-100 px-2 py-0.5 rounded-full">Verified</span>
+                  <span class="text-[13px] font-medium text-green-800"
+                    >{form.email}</span
+                  >
+                  <span
+                    class="ml-auto text-[11px] font-semibold text-green-600 bg-green-100 px-2 py-0.5 rounded-full"
+                    >Verified</span
+                  >
                 </div>
               </div>
 
               <!-- Address -->
               <div>
                 <p class="{labelTextClass} mb-2.5">
-                  Address
-                  <span class="text-red-400">*</span>
+                  Address <span class="text-red-400">*</span>
                 </p>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <label class="flex flex-col gap-1.5">
@@ -507,9 +675,9 @@
                         <option value={s}>{s}</option>
                       {/each}
                     </select>
-                    {#if errors.state}<span class={errorClass}
-                        >{errors.state}</span
-                      >{/if}
+                    {#if errors.state}
+                      <span class={errorClass}>{errors.state}</span>
+                    {/if}
                   </label>
                   <label class="flex flex-col gap-1.5">
                     <span class={labelTextClass}>City</span>
@@ -518,10 +686,15 @@
                       bind:value={form.city}
                       class="{inputClass} {errors.city ? 'border-red-300' : ''}"
                       placeholder="Enter city"
+                      oninput={(e) => {
+                        const el = e.target as HTMLInputElement;
+                        el.value = el.value.replace(/[^A-Za-z\s.\-]/g, "");
+                        form.city = el.value;
+                      }}
                     />
-                    {#if errors.city}<span class={errorClass}
-                        >{errors.city}</span
-                      >{/if}
+                    {#if errors.city}
+                      <span class={errorClass}>{errors.city}</span>
+                    {/if}
                   </label>
                   <label class="flex flex-col gap-1.5">
                     <span class={labelTextClass}>Pincode</span>
@@ -533,10 +706,15 @@
                         : ''}"
                       placeholder="6-digit pincode"
                       maxlength="6"
+                      oninput={(e) => {
+                        const el = e.target as HTMLInputElement;
+                        el.value = el.value.replace(/\D/g, "");
+                        form.pincode = el.value;
+                      }}
                     />
-                    {#if errors.pincode}<span class={errorClass}
-                        >{errors.pincode}</span
-                      >{/if}
+                    {#if errors.pincode}
+                      <span class={errorClass}>{errors.pincode}</span>
+                    {/if}
                   </label>
                 </div>
               </div>
@@ -637,9 +815,9 @@
                       (e.target as HTMLInputElement).files?.[0] ?? null;
                   }}
                 />
-                {#if errors.aadhaarFile}<span class={errorClass}
-                    >{errors.aadhaarFile}</span
-                  >{/if}
+                {#if errors.aadhaarFile}
+                  <span class={errorClass}>{errors.aadhaarFile}</span>
+                {/if}
               </div>
 
               <!-- PAN Card -->
@@ -713,9 +891,9 @@
                       (e.target as HTMLInputElement).files?.[0] ?? null;
                   }}
                 />
-                {#if errors.panFile}<span class={errorClass}
-                    >{errors.panFile}</span
-                  >{/if}
+                {#if errors.panFile}
+                  <span class={errorClass}>{errors.panFile}</span>
+                {/if}
               </div>
 
               <!-- Driving License -->
@@ -789,9 +967,9 @@
                       (e.target as HTMLInputElement).files?.[0] ?? null;
                   }}
                 />
-                {#if errors.dlFile}<span class={errorClass}
-                    >{errors.dlFile}</span
-                  >{/if}
+                {#if errors.dlFile}
+                  <span class={errorClass}>{errors.dlFile}</span>
+                {/if}
               </div>
             </div>
 
@@ -829,10 +1007,15 @@
                     ? 'border-red-300'
                     : ''}"
                   placeholder="Name as on bank account"
+                  oninput={(e) => {
+                    const el = e.target as HTMLInputElement;
+                    el.value = el.value.replace(/[^A-Za-z\s.\-']/g, "");
+                    form.accountHolderName = el.value;
+                  }}
                 />
-                {#if errors.accountHolderName}<span class={errorClass}
-                    >{errors.accountHolderName}</span
-                  >{/if}
+                {#if errors.accountHolderName}
+                  <span class={errorClass}>{errors.accountHolderName}</span>
+                {/if}
               </label>
 
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -849,10 +1032,15 @@
                       : ''}"
                     placeholder="Enter account number"
                     maxlength="18"
+                    oninput={(e) => {
+                      const el = e.target as HTMLInputElement;
+                      el.value = el.value.replace(/\D/g, "");
+                      form.accountNumber = el.value;
+                    }}
                   />
-                  {#if errors.accountNumber}<span class={errorClass}
-                      >{errors.accountNumber}</span
-                    >{/if}
+                  {#if errors.accountNumber}
+                    <span class={errorClass}>{errors.accountNumber}</span>
+                  {/if}
                 </label>
                 <label class="flex flex-col gap-1.5">
                   <span class={labelTextClass}
@@ -867,6 +1055,12 @@
                       : ''}"
                     placeholder="Re-enter account number"
                     maxlength="18"
+                    oninput={(e) => {
+                      const el = e.target as HTMLInputElement;
+                      el.value = el.value.replace(/\D/g, "");
+                      form.confirmAccountNumber = el.value;
+                    }}
+                    onpaste={(e) => e.preventDefault()}
                   />
                   {#if errors.confirmAccountNumber}
                     <span class={errorClass}>{errors.confirmAccountNumber}</span
@@ -888,16 +1082,20 @@
                   placeholder="e.g., SBIN0001234"
                   maxlength="11"
                   oninput={(e) => {
-                    form.ifsc = (
-                      e.target as HTMLInputElement
-                    ).value.toUpperCase();
+                    const el = e.target as HTMLInputElement;
+                    // Allow only letters and digits, force uppercase
+                    el.value = el.value
+                      .replace(/[^A-Za-z0-9]/g, "")
+                      .toUpperCase();
+                    form.ifsc = el.value;
                   }}
                 />
-                {#if errors.ifsc}<span class={errorClass}>{errors.ifsc}</span
-                  >{/if}
+                {#if errors.ifsc}
+                  <span class={errorClass}>{errors.ifsc}</span>
+                {/if}
               </label>
 
-              <!-- Cancel Cheque -->
+              <!-- Cancelled Cheque -->
               <div class="flex flex-col gap-1.5">
                 <span class={labelTextClass}
                   >Cancelled Cheque / Passbook Scan <span class="text-red-400"
@@ -970,9 +1168,9 @@
                       (e.target as HTMLInputElement).files?.[0] ?? null;
                   }}
                 />
-                {#if errors.cancelChequeFile}<span class={errorClass}
-                    >{errors.cancelChequeFile}</span
-                  >{/if}
+                {#if errors.cancelChequeFile}
+                  <span class={errorClass}>{errors.cancelChequeFile}</span>
+                {/if}
               </div>
             </div>
 
@@ -1029,8 +1227,15 @@
                       Email
                     </p>
                     <div class="flex items-center gap-2 mt-0.5">
-                      <p class="text-[13px] text-gray-900">{form.email || "—"}</p>
-                      {#if form.email}<span class="text-[10px] font-semibold text-green-600 bg-green-100 px-1.5 py-0.5 rounded-full">Verified</span>{/if}
+                      <p class="text-[13px] text-gray-900">
+                        {form.email || "—"}
+                      </p>
+                      {#if form.email}
+                        <span
+                          class="text-[10px] font-semibold text-green-600 bg-green-100 px-1.5 py-0.5 rounded-full"
+                          >Verified</span
+                        >
+                      {/if}
                     </div>
                   </div>
                   <div class="col-span-2">
