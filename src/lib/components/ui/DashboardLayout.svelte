@@ -24,39 +24,66 @@
 
 	const NAV: Record<Role, NavItem[]> = {
 		super_admin: [
-			{ label: 'Dashboard',  href: '/admin',             icon: 'home' },
-			{ label: 'Customers',  href: '/admin/customers',   icon: 'users' },
-			{ label: 'Engineers',  href: '/admin/engineers',   icon: 'hardhat' },
-			{ label: 'Projects',   href: '/admin/projects',    icon: 'folder' },
-			{ label: 'Tickets',    href: '/admin/tickets',     icon: 'ticket' }
+			{ label: 'Dashboard',    href: '/admin',                  icon: 'home'    },
+			{ label: 'Customers',    href: '/admin/customers',        icon: 'users'   },
+			{ label: 'Engineers',    href: '/admin/engineers',        icon: 'hardhat' },
+			{ label: 'Projects',     href: '/admin/projects',         icon: 'folder'  },
+			{ label: 'Tickets',      href: '/admin/tickets',          icon: 'ticket'  },
+			{ label: 'Payout Rates', href: '/admin/payouts/rates',    icon: 'dollar'  },
+			{ label: 'Payout Log',   href: '/admin/payouts/log',      icon: 'chart'   }
+		],
+		national_head: [
+			{ label: 'Dashboard', href: '/national-head/dashboard', icon: 'home' },
+			{ label: 'Customers', href: '/national-head/customers', icon: 'users' },
+			{ label: 'Engineers', href: '/national-head/engineers', icon: 'hardhat' },
+			{ label: 'Projects', href: '/national-head/projects', icon: 'folder' },
+			{ label: 'Tickets', href: '/national-head/tickets', icon: 'ticket' },
+			{ label: 'Reports', href: '/national-head/reports', icon: 'chart' },
+			{ label: 'SLA', href: '/national-head/sla', icon: 'shield' },
+			{ label: 'Payouts', href: '/national-head/payouts', icon: 'dollar' }
 		],
 		engineer: [
-			{ label: 'Dashboard', href: '/engineer',         icon: 'home' },
-			{ label: 'Tickets',   href: '/engineer/tickets', icon: 'ticket' }
+			{ label: 'Dashboard', href: '/engineer',          icon: 'home'   },
+			{ label: 'Tickets',   href: '/engineer/tickets',  icon: 'ticket' },
+			{ label: 'Earnings',  href: '/engineer/earnings', icon: 'dollar' }
 		],
 		customer: [
 			{ label: 'Dashboard', href: '/customer',         icon: 'home' },
 			{ label: 'Tickets',   href: '/customer/tickets', icon: 'ticket' }
 		],
 		noc: [
-			{ label: 'Dashboard', href: '/noc',         icon: 'home' },
-			{ label: 'Tickets',   href: '/noc/tickets', icon: 'ticket' }
+			{ label: 'Dashboard',   href: '/noc',                 icon: 'home'   },
+			{ label: 'Tickets',     href: '/noc/tickets',         icon: 'ticket' },
+			{ label: 'Replacements', href: '/noc/replacements',   icon: 'cube'   }
 		],
 		state_planner: [
 			{ label: 'Dashboard', href: '/planner',         icon: 'home' },
 			{ label: 'Tickets',   href: '/planner/tickets', icon: 'ticket' }
 		],
 		project_head: [
-			{ label: 'Dashboard', href: '/project', icon: 'home' }
+			{ label: 'Dashboard', href: '/project-head/dashboard', icon: 'home' },
+			{ label: 'Tickets', href: '/project-head/tickets', icon: 'ticket' },
+			{ label: 'Team', href: '/project-head/team', icon: 'hardhat' },
+			{ label: 'Customers', href: '/project-head/customers', icon: 'users' },
+			{ label: 'SLA', href: '/project-head/sla', icon: 'shield' }
 		]
 	};
 
 	let navItems = $derived(NAV[role] ?? []);
 	let currentPath = $derived(page.url.pathname);
+	const exactMatchRoutes = new Set([
+		'/admin',
+		'/engineer',
+		'/customer',
+		'/noc',
+		'/planner',
+		'/project',
+		'/project-head/dashboard',
+		'/national-head/dashboard'
+	]);
 
 	function isActive(href: string): boolean {
-		if (href === '/admin' || href === '/engineer' || href === '/customer' ||
-		    href === '/noc' || href === '/planner' || href === '/project') {
+		if (exactMatchRoutes.has(href)) {
 			return currentPath === href;
 		}
 		return currentPath.startsWith(href);
@@ -141,6 +168,14 @@
 						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
 					{:else if item.icon === 'ticket'}
 						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v2z"/></svg>
+					{:else if item.icon === 'chart'}
+						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
+					{:else if item.icon === 'shield'}
+						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+					{:else if item.icon === 'dollar'}
+						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+					{:else if item.icon === 'cube'}
+						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
 					{/if}
 					{item.label}
 				</a>
@@ -289,6 +324,16 @@
 								<p class="text-[13px] font-semibold text-[#0B182A] truncate">{user?.name ?? '—'}</p>
 								<p class="text-[11px] text-gray-500 truncate">{user?.email ?? '—'}</p>
 							</div>
+							<a
+								href="/profile"
+								onclick={() => (showDropdown = false)}
+								class="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-md text-[13px] text-gray-700 hover:bg-gray-100 transition-colors"
+							>
+								<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+									<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+								</svg>
+								My Profile
+							</a>
 							<button
 								class="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-md text-[13px] text-red-600 hover:bg-gray-100 transition-colors"
 								onclick={handleLogout}
