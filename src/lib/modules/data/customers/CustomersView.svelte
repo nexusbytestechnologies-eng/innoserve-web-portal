@@ -2,10 +2,17 @@
   import { onMount } from "svelte";
   import * as Icons from "$lib/icons";
   import CustomerForm from "./CustomerForm.svelte";
+  import CustomerView from "./CustomerView.svelte";
   import { fetchCustomers, type Customer } from "./queries";
-  import { createCustomer, updateCustomerStatus } from "./actions";
+  import { createCustomer, updateCustomer, updateCustomerStatus } from "./actions";
   import { toast } from "svelte-sonner";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
+
+  interface Props {
+    canDelete?: boolean;
+  }
+
+  let { canDelete = true }: Props = $props();
 
   const customerStats = [
     { label: "Total Customers", value: "0", icon: "users", color: "#0B182A" },
@@ -85,14 +92,31 @@
     return "bg-gray-100 text-gray-500";
   }
 
+  // ── Form (add / edit) ───────────────────────────────────────────────────────
+
   let showForm = $state(false);
   let formMode = $state<"add" | "edit">("add");
   let editData = $state<Customer | null>(null);
+
+  // ── View modal ──────────────────────────────────────────────────────────────
+
+  let viewCustomer = $state<Customer | null>(null);
 
   function openAdd() {
     formMode = "add";
     editData = null;
     showForm = true;
+  }
+
+  function openEdit(c: Customer) {
+    viewCustomer = null; // close view modal if open
+    formMode = "edit";
+    editData = c;
+    showForm = true;
+  }
+
+  function openView(c: Customer) {
+    viewCustomer = c;
   }
 
   async function handleSave(form: Record<string, string>) {
@@ -101,14 +125,39 @@
         const created = await createCustomer({
           companyName: form.company,
           contactPersonName: form.contact,
+          email: form.email || undefined,
           phone: form.phone,
-          addressState: form.location,
+          addressState: form.addressState || undefined,
+          addressCity: form.addressCity || undefined,
+          addressPincode: form.addressPincode || undefined,
           author: "admin",
         });
         customers = [...customers, created];
+        customerStats[0].value = String(customers.length);
         toast.success("Customer created successfully");
       } catch (err) {
         toast.error(`Failed to create customer: ${(err as Error).message}`);
+        return;
+      }
+    } else if (editData) {
+      try {
+        const updated = await updateCustomer({
+          id: editData.id,
+          companyName: form.company,
+          contactPersonName: form.contact,
+          email: form.email || undefined,
+          phone: form.phone,
+          addressState: form.addressState || undefined,
+          addressCity: form.addressCity || undefined,
+          addressPincode: form.addressPincode || undefined,
+          secondaryContactName: form.secondaryContactName || undefined,
+          secondaryContactEmail: form.secondaryContactEmail || undefined,
+          secondaryContactPhone: form.secondaryContactPhone || undefined,
+        });
+        customers = customers.map(c => c.id === updated.id ? { ...c, ...updated } : c);
+        toast.success("Customer updated successfully");
+      } catch (err) {
+        toast.error(`Failed to update customer: ${(err as Error).message}`);
         return;
       }
     }
@@ -116,7 +165,7 @@
   }
 </script>
 
-<div class="flex flex-col gap-5">
+<div class="flex flex-col gap-5" data-can-delete={canDelete}>
   <!-- Stat Cards -->
   <div class="grid grid-cols-1 md:grid-cols-4 gap-3 md:gap-4">
     {#each customerStats as stat}
@@ -210,12 +259,12 @@
               <tr class="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                 <td class="py-3 px-3 text-[#E87D1F] font-medium text-[13px]">{c.companyName}</td>
                 <td class="py-3 px-3 text-[13px] text-gray-700">{c.contactPersonName}</td>
-                <td class="py-3 px-3 text-[13px] text-gray-600">{c.email}</td>
-                <td class="py-3 px-3 text-[13px] text-gray-600">{c.phone}</td>
+                <td class="py-3 px-3 text-[13px] text-gray-600">{c.email || "—"}</td>
+                <td class="py-3 px-3 text-[13px] text-gray-600">{c.phone || "—"}</td>
                 <td class="py-3 px-3 text-[13px] text-gray-600">{c.addressState ?? "—"}</td>
                 <td class="py-3 px-3">
                   <span class="text-[11px] font-semibold px-2.5 py-1 rounded-full {statusStyle(c.status)}">
-                    {c.status}
+                    {c.status === "pending_approval" ? "Pending" : c.status}
                   </span>
                 </td>
                 <td class="py-3 px-3">
@@ -231,11 +280,21 @@
                         onclick={() => promptReject(c)}
                         class="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition-colors cursor-pointer"
                       >Reject</button>
-                    {:else}
-                      <button aria-label="View customer" class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-[#0B182A] hover:bg-gray-100 transition-colors">
-                        <Icons.Eye size={16} />
-                      </button>
                     {/if}
+                    <button
+                      aria-label="View customer"
+                      onclick={() => openView(c)}
+                      class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-[#0B182A] hover:bg-gray-100 transition-colors"
+                    >
+                      <Icons.Eye size={16} />
+                    </button>
+                    <button
+                      aria-label="Edit customer"
+                      onclick={() => openEdit(c)}
+                      class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-[#0B182A] hover:bg-gray-100 transition-colors"
+                    >
+                      <Icons.Edit size={16} />
+                    </button>
                   </div>
                 </td>
               </tr>
@@ -259,6 +318,14 @@
     </div>
   </div>
 </div>
+
+{#if viewCustomer}
+  <CustomerView
+    customer={viewCustomer}
+    onClose={() => (viewCustomer = null)}
+    onEdit={() => openEdit(viewCustomer!)}
+  />
+{/if}
 
 {#if showForm}
   <CustomerForm

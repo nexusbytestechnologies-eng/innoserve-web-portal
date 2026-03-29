@@ -28,6 +28,7 @@ const FETCH_CUSTOMERS = `
   query {
     customers {
       id companyName contactPersonName email phone
+      secondaryContactName secondaryContactEmail secondaryContactPhone
       addressState addressCity addressPincode
       userId status approvedBy approvedAt author createdAt
     }
