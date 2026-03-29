@@ -1,7 +1,7 @@
 import type { LayoutLoad } from './$types';
 
 // Public paths — skip auth check entirely
-const PUBLIC_PATHS = new Set(['/', '/login', '/auth', '/unauthorized', '/forgot-password', '/customer/register']);
+const PUBLIC_PATHS = new Set(['/', '/login', '/auth', '/unauthorized', '/forgot-password', '/reset-password', '/customer/register']);
 const PUBLIC_PREFIXES = ['/onboarding/'];
 
 export const load: LayoutLoad = async ({ fetch, url }) => {

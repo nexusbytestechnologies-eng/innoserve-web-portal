@@ -1,13 +1,13 @@
-<script lang="ts">
+	<script lang="ts">
 	import { goto } from '$app/navigation';
 	import { authStore } from '$lib/stores/auth';
-	import { ROLE_REDIRECTS } from '$lib/stores/auth';
+	import { redirectAfterLogin } from '$lib/auth/redirectAfterLogin';
 
 	const user = $derived($authStore.user);
 
 	function goToDashboard() {
 		if (user?.role) {
-			goto(ROLE_REDIRECTS[user.role]);
+			goto(redirectAfterLogin(user.role));
 		} else {
 			goto('/login');
 		}

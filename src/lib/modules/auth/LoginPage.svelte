@@ -4,7 +4,8 @@
 	import Logo from '$lib/ui/Logo.svelte';
 	import Input from '$lib/components/ui/Input.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
-	import { authStore, ROLE_REDIRECTS } from '$lib/stores/auth';
+	import { authStore } from '$lib/stores/auth';
+	import { redirectAfterLogin } from '$lib/auth/redirectAfterLogin';
 	import { authLogin, ApiError } from '$lib/utils/api';
 
 	// ── Form state ─────────────────────────────────────────────────────────
@@ -72,7 +73,7 @@
 			authStore.setUser(user);
 			toast.success(`Welcome back, ${user.name}!`);
 
-			const destination = ROLE_REDIRECTS[user.role] ?? '/';
+			const destination = redirectAfterLogin(user.role);
 			goto(destination);
 		} catch (err) {
 			if (err instanceof ApiError) {
