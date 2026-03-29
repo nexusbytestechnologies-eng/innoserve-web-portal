@@ -4,8 +4,17 @@
   import { toast } from 'svelte-sonner';
   import { authStore } from '$lib/stores/auth';
   import { fetchTickets, type Ticket } from '$lib/modules/data/tickets/queries';
-  import { updateTicket, createTicketHistory, createAttachment } from '$lib/modules/data/tickets/actions';
-  import { uploadFile, fileUrl } from '$lib/api/upload';
+  import { createTicketHistory } from '$lib/modules/data/tickets/actions';
+  import { escalateTicket, updateTicketStatus, uploadTicketAttachment } from '$lib/api/tickets';
+  import {
+    requestReplacement,
+    fetchTicketReplacement,
+    type ReplacementRequest,
+  } from '$lib/api/replacements';
+  import { ROLE_STATUS_OPTIONS, TICKET_STATUS_LABELS, type TicketStatus } from '$lib/config/roles';
+  import { ApiError } from '$lib/api/rest';
+  import { fetchProjects, type Project } from '$lib/modules/data/projects/queries';
+  import ClosureChecklist from '$lib/modules/data/tickets/ClosureChecklist.svelte';
 
   const user = $derived($authStore.user);
 
@@ -13,8 +22,16 @@
 
   // Engineers can move to In Progress or Resolved only.
   // "Send for Validation" is a separate direct action (resolved → pending_validation).
-  const ENGINEER_STATUSES = ['In Progress', 'Resolved'];
+  const ENGINEER_STATUSES = ROLE_STATUS_OPTIONS.engineer;
   const ESCALATION_LEVELS = ['L2', 'L3'] as const;
+
+  function normalizeStatus(s: string): string {
+    return (s ?? '').toLowerCase().replace(/ /g, '_');
+  }
+
+  function statusLabel(s: string): string {
+    return TICKET_STATUS_LABELS[normalizeStatus(s) as keyof typeof TICKET_STATUS_LABELS] ?? s ?? '—';
+  }
 
   const fieldClass =
     'px-3.5 py-2.5 border border-gray-200 rounded-lg text-[13px] text-gray-700 outline-none focus:border-[#0B182A] transition-colors w-full bg-white';
@@ -22,33 +39,53 @@
   // ── State ─────────────────────────────────────────────────────────────────
 
   let tickets = $state<Ticket[]>([]);
+  let projects = $state<Project[]>([]);
   let loading = $state(true);
 
   // Status update modal
   let statusTicket = $state<Ticket | null>(null);
-  let newStatus = $state('');
+  let newStatus = $state<TicketStatus>('in_progress');
   let remarks = $state('');
   let statusSaving = $state(false);
 
   // Escalation modal
-  let escalateTicket = $state<Ticket | null>(null);
+  let escalateModal = $state<Ticket | null>(null);
   let escalationLevel = $state<'L2' | 'L3' | ''>('');
   let escalationReason = $state('');
   let escalating = $state(false);
 
+  // Device replacement modal
+  let replacementModal = $state<Ticket | null>(null);
+  let replacementDeviceType = $state('Router');
+  let replacementReason = $state('');
+  let replacementReasonError = $state('');
+  let replacingTicket = $state(false);
+
+  // Replacement status tracker
+  let trackerTicket = $state<Ticket | null>(null);
+  let trackerData = $state<ReplacementRequest | null>(null);
+  let trackerLoading = $state(false);
+
   // Upload proof modal
   let uploadTicket = $state<Ticket | null>(null);
-  let fileInput = $state<HTMLInputElement | null>(null);
-  let selectedFile = $state<File | null>(null);
-  let uploading = $state(false);
-  let uploadedUrl = $state('');
+  let irFileInput = $state<HTMLInputElement | null>(null);
+  let siteImageInput = $state<HTMLInputElement | null>(null);
+  let selectedIrFile = $state<File | null>(null);
+  let selectedSiteFiles = $state<File[]>([]);
+  let uploadingIr = $state(false);
+  let uploadingSiteImages = $state(false);
+  let checklistRefreshKey = $state(0);
 
   // ── Load ──────────────────────────────────────────────────────────────────
 
   onMount(async () => {
     try {
-      const all = await fetchTickets();
+      const [all, projs] = await Promise.all([
+        fetchTickets(),
+        fetchProjects().catch(() => [] as Project[]),
+      ]);
       tickets = user ? all.filter((t) => t.assignedEngineerId === user.id) : all;
+      projects = projs;
     } catch (err) {
       toast.error('Failed to load tickets');
     } finally {
@@ -56,18 +93,28 @@
     }
   });
 
+  function projectName(id: string): string {
+    if (!id) return '—';
+    return projects.find((p) => p.id === id)?.name ?? '—';
+  }
+
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   function statusBadge(status: string) {
     const map: Record<string, string> = {
-      'Open': 'bg-blue-50 text-blue-600',
-      'In Progress': 'bg-amber-50 text-amber-600',
-      'Pending Validation': 'bg-purple-50 text-purple-600',
-      'Resolved': 'bg-green-50 text-green-600',
-      'Closed': 'bg-gray-100 text-gray-500',
-      'Cancelled': 'bg-red-50 text-red-500',
+      'open': 'bg-blue-50 text-blue-600',
+      'assigned': 'bg-indigo-50 text-indigo-600',
+      'in_progress': 'bg-amber-50 text-amber-600',
+      'on_hold': 'bg-yellow-50 text-yellow-700',
+      'pending_replacement': 'bg-fuchsia-50 text-fuchsia-700',
+      'escalated_l2': 'bg-orange-50 text-orange-600',
+      'escalated_l3': 'bg-red-50 text-red-600',
+      'pending_validation': 'bg-purple-50 text-purple-600',
+      'resolved': 'bg-green-50 text-green-600',
+      'closed': 'bg-gray-100 text-gray-500',
+      'reopened': 'bg-cyan-50 text-cyan-700',
     };
-    return map[status] ?? 'bg-gray-100 text-gray-500';
+    return map[normalizeStatus(status)] ?? 'bg-gray-100 text-gray-500';
   }
 
   function priorityBadge(p: string) {
@@ -89,15 +136,15 @@
 
   // Can the engineer still act on this ticket?
   function canAct(ticket: Ticket): boolean {
-    return !['Closed', 'Cancelled'].includes(ticket.status);
+    return !['closed'].includes(normalizeStatus(ticket.status));
   }
 
   // ── Status update ─────────────────────────────────────────────────────────
 
   function openStatus(ticket: Ticket) {
     statusTicket = ticket;
-    // Default to next logical status
-    newStatus = ticket.status === 'Open' ? 'In Progress' : ticket.status;
+    const ns = normalizeStatus(ticket.status);
+    newStatus = (ns === 'open' || ns === 'assigned' ? 'in_progress' : ns) as TicketStatus;
     remarks = '';
   }
 
@@ -111,10 +158,14 @@
         remarks: remarks.trim() || undefined,
         author: user?.id ?? 'engineer',
       });
-      const updated = await updateTicket({ id: statusTicket.id, status: newStatus });
+      const updated = await updateTicketStatus(
+        statusTicket.id,
+        newStatus,
+        remarks.trim() || undefined,
+      );
       tickets = tickets.map((t) => (t.id === updated.id ? { ...t, ...updated } : t));
 
-      if (newStatus === 'Pending Validation') {
+      if (newStatus === 'pending_validation') {
         toast.success('Ticket submitted for admin validation');
       } else {
         toast.success('Status updated');
@@ -136,11 +187,15 @@
     try {
       await createTicketHistory({
         ticketId: ticket.id,
-        status: 'Pending Validation',
+        status: 'pending_validation',
         remarks: 'Sent for admin validation',
         author: user?.id ?? 'engineer',
       });
-      const updated = await updateTicket({ id: ticket.id, status: 'Pending Validation' });
+      const updated = await updateTicketStatus(
+        ticket.id,
+        'pending_validation',
+        'Sent for admin validation',
+      );
       tickets = tickets.map((t) => (t.id === updated.id ? { ...t, ...updated } : t));
       toast.success('Ticket submitted for validation');
     } catch (err) {
@@ -153,30 +208,34 @@
   // ── Escalation ────────────────────────────────────────────────────────────
 
   function openEscalate(ticket: Ticket) {
-    escalateTicket = ticket;
+    escalateModal = ticket;
     escalationLevel = ticket.escalationLevel as 'L2' | 'L3' | '' ?? '';
     escalationReason = '';
   }
 
   async function saveEscalation() {
-    if (!escalateTicket || !escalationLevel) return;
+    if (!escalateModal || !escalationLevel) return;
     escalating = true;
     try {
-      const updated = await updateTicket({
-        id: escalateTicket.id,
-        escalationLevel,
+      const updated = await escalateTicket(escalateModal.id, {
+        level: escalationLevel,
+        reason: escalationReason.trim() || `Support requested: ${escalationLevel}`,
       });
       await createTicketHistory({
-        ticketId: escalateTicket.id,
-        status: escalateTicket.status,
+        ticketId: escalateModal.id,
+        status: normalizeStatus(escalateModal.status),
         remarks: `Support requested: ${escalationLevel}${escalationReason.trim() ? ` — ${escalationReason.trim()}` : ''}`,
         author: user?.id ?? 'engineer',
       });
       tickets = tickets.map((t) => (t.id === updated.id ? { ...t, ...updated } : t));
       toast.success(`Support request sent (${escalationLevel})`);
-      escalateTicket = null;
+      escalateModal = null;
     } catch (err) {
-      toast.error(`Failed: ${(err as Error).message}`);
+      if (err instanceof ApiError && err.status === 403) {
+        toast.error('Unauthorized: cannot escalate this ticket');
+      } else {
+        toast.error(`Failed: ${(err as Error).message}`);
+      }
     } finally {
       escalating = false;
     }
@@ -186,27 +245,109 @@
 
   function openUpload(ticket: Ticket) {
     uploadTicket = ticket;
-    selectedFile = null;
-    uploadedUrl = '';
+    selectedIrFile = null;
+    selectedSiteFiles = [];
+    checklistRefreshKey += 1;
   }
 
-  function handleFileChange(e: Event) {
-    selectedFile = (e.currentTarget as HTMLInputElement).files?.[0] ?? null;
+  function handleIrFileChange(e: Event) {
+    selectedIrFile = (e.currentTarget as HTMLInputElement).files?.[0] ?? null;
   }
 
-  async function submitUpload() {
-    if (!uploadTicket || !selectedFile) return;
-    uploading = true;
+  function handleSiteImageChange(e: Event) {
+    selectedSiteFiles = Array.from((e.currentTarget as HTMLInputElement).files ?? []);
+  }
+
+  async function submitIrUpload() {
+    if (!uploadTicket || !selectedIrFile) return;
+    uploadingIr = true;
     try {
-      const fileId = await uploadFile(selectedFile);
-      const url = fileUrl(fileId);
-      await createAttachment({ ticketId: uploadTicket.id, type: 'proof', fileUrl: url, author: user?.id ?? 'engineer' });
-      uploadedUrl = url;
-      toast.success('Proof uploaded successfully');
+      await uploadTicketAttachment({
+        ticketId: uploadTicket.id,
+        file: selectedIrFile,
+        type: 'ir_report',
+        author: user?.id ?? 'engineer',
+      });
+      selectedIrFile = null;
+      if (irFileInput) irFileInput.value = '';
+      checklistRefreshKey += 1;
+      toast.success('IR uploaded successfully');
     } catch (err) {
       toast.error(`Upload failed: ${(err as Error).message}`);
     } finally {
-      uploading = false;
+      uploadingIr = false;
+    }
+  }
+
+  async function submitSiteImages() {
+    if (!uploadTicket || selectedSiteFiles.length === 0) return;
+    const ticketId = uploadTicket.id;
+    uploadingSiteImages = true;
+    try {
+      await Promise.all(
+        selectedSiteFiles.map((file) =>
+          uploadTicketAttachment({
+            ticketId,
+            file,
+            type: 'site_image',
+            author: user?.id ?? 'engineer',
+          }),
+        ),
+      );
+      selectedSiteFiles = [];
+      if (siteImageInput) siteImageInput.value = '';
+      checklistRefreshKey += 1;
+      toast.success('Site image(s) uploaded successfully');
+    } catch (err) {
+      toast.error(`Upload failed: ${(err as Error).message}`);
+    } finally {
+      uploadingSiteImages = false;
+    }
+  }
+
+  // ── Device Replacement ────────────────────────────────────────────────────
+
+  function openReplacement(ticket: Ticket) {
+    replacementModal = ticket;
+    replacementDeviceType = 'Router';
+    replacementReason = '';
+    replacementReasonError = '';
+  }
+
+  async function submitReplacement() {
+    if (!replacementModal) return;
+    if (replacementReason.trim().length < 20) {
+      replacementReasonError = 'Reason must be at least 20 characters';
+      return;
+    }
+    replacementReasonError = '';
+    replacingTicket = true;
+    try {
+      await requestReplacement(replacementModal.id, {
+        deviceType: replacementDeviceType,
+        reason: replacementReason.trim(),
+      });
+      // Update ticket status in local list
+      tickets = tickets.map((t) =>
+        t.id === replacementModal!.id ? { ...t, status: 'pending_replacement' } : t,
+      );
+      toast.success('Replacement request submitted. Ticket status updated to Pending Replacement.');
+      replacementModal = null;
+    } catch (err) {
+      toast.error(`Failed: ${(err as Error).message}`);
+    } finally {
+      replacingTicket = false;
+    }
+  }
+
+  async function openTracker(ticket: Ticket) {
+    trackerTicket = ticket;
+    trackerData = null;
+    trackerLoading = true;
+    try {
+      trackerData = await fetchTicketReplacement(ticket.id);
+    } finally {
+      trackerLoading = false;
     }
   }
 </script>
@@ -218,10 +359,10 @@
   <!-- Stats -->
   <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
     {#each [
-      { label: 'Open', value: tickets.filter(t => t.status === 'Open').length, color: 'text-blue-600' },
-      { label: 'In Progress', value: tickets.filter(t => t.status === 'In Progress').length, color: 'text-amber-600' },
-      { label: 'Pending Validation', value: tickets.filter(t => t.status === 'Pending Validation').length, color: 'text-purple-600' },
-      { label: 'Resolved', value: tickets.filter(t => t.status === 'Resolved').length, color: 'text-green-600' },
+      { label: 'Open', value: tickets.filter(t => normalizeStatus(t.status) === 'open').length, color: 'text-blue-600' },
+      { label: 'In Progress', value: tickets.filter(t => normalizeStatus(t.status) === 'in_progress').length, color: 'text-amber-600' },
+      { label: 'Pending Validation', value: tickets.filter(t => normalizeStatus(t.status) === 'pending_validation').length, color: 'text-purple-600' },
+      { label: 'Resolved', value: tickets.filter(t => normalizeStatus(t.status) === 'resolved').length, color: 'text-green-600' },
     ] as stat}
       <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
         <p class="text-[12px] text-gray-400 mb-1">{stat.label}</p>
@@ -241,7 +382,7 @@
       <table class="w-full text-sm border-collapse">
         <thead>
           <tr class="border-b border-gray-100">
-            {#each ['TICKET', 'ISSUE', 'STATUS', 'PRIORITY', 'ESCALATION', 'DATE', 'ACTIONS'] as col}
+            {#each ['TICKET', 'PROJECT', 'ISSUE', 'STATUS', 'PRIORITY', 'ESCALATION', 'DATE', 'ACTIONS'] as col}
               <th class="text-left text-[11px] font-semibold text-gray-400 tracking-wide py-3 px-3 whitespace-nowrap">{col}</th>
             {/each}
           </tr>
@@ -249,7 +390,7 @@
         <tbody>
           {#if loading}
             <tr>
-              <td colspan="7" class="py-12 text-center text-[13px] text-gray-400">
+              <td colspan="8" class="py-12 text-center text-[13px] text-gray-400">
                 <div class="flex items-center justify-center gap-2">
                   <div class="w-4 h-4 border-2 border-gray-200 border-t-[#0B182A] rounded-full animate-spin"></div>
                   Loading…
@@ -258,7 +399,7 @@
             </tr>
           {:else if tickets.length === 0}
             <tr>
-              <td colspan="7" class="py-16 text-center">
+              <td colspan="8" class="py-16 text-center">
                 <div class="flex flex-col items-center gap-2">
                   <div class="w-12 h-12 rounded-full bg-gray-50 flex items-center justify-center">
                     <Icons.Ticket size={22} stroke="#9ca3af" />
@@ -270,10 +411,11 @@
           {:else}
             {#each tickets as t}
               <tr class="border-b border-gray-50 hover:bg-gray-50/60 transition-colors
-                         {t.status === 'Pending Validation' ? 'bg-purple-50/20' : ''}">
+                         {normalizeStatus(t.status) === 'pending_validation' ? 'bg-purple-50/20' : ''}">
                 <td class="py-3 px-3 text-[13px] font-semibold text-[#E87D1F] whitespace-nowrap">
                   {t.ticketNumber || t.id.slice(0, 8)}
                 </td>
+                <td class="py-3 px-3 text-[13px] text-gray-600 whitespace-nowrap">{projectName(t.projectId)}</td>
                 <td class="py-3 px-3">
                   <p class="text-[13px] font-medium text-gray-800 max-w-[180px] truncate">{t.title}</p>
                   {#if t.description}
@@ -282,7 +424,7 @@
                 </td>
                 <td class="py-3 px-3">
                   <span class="text-[11px] font-semibold px-2.5 py-1 rounded-full {statusBadge(t.status)}">
-                    {t.status || '—'}
+                    {statusLabel(t.status)}
                   </span>
                 </td>
                 <td class="py-3 px-3">
@@ -318,11 +460,11 @@
                         class="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors cursor-pointer whitespace-nowrap"
                       >
                         <Icons.Upload size={12} />
-                        Proof
+                        Docs
                       </button>
 
                       <!-- Send for Validation — only when resolved -->
-                      {#if t.status === 'Resolved'}
+                      {#if normalizeStatus(t.status) === 'resolved'}
                         <button
                           onclick={() => sendForValidation(t)}
                           disabled={sendingValidation === t.id}
@@ -331,6 +473,25 @@
                         >
                           <Icons.CheckCircle size={12} />
                           {sendingValidation === t.id ? 'Sending…' : 'Validate'}
+                        </button>
+                      {/if}
+
+                      <!-- Device Replacement -->
+                      {#if normalizeStatus(t.status) === 'in_progress'}
+                        <button
+                          onclick={() => openReplacement(t)}
+                          class="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg bg-fuchsia-50 text-fuchsia-700 hover:bg-fuchsia-100 transition-colors cursor-pointer whitespace-nowrap"
+                        >
+                          <Icons.Cube size={12} />
+                          Replace
+                        </button>
+                      {:else if normalizeStatus(t.status) === 'pending_replacement'}
+                        <button
+                          onclick={() => openTracker(t)}
+                          class="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg bg-fuchsia-50 text-fuchsia-700 hover:bg-fuchsia-100 transition-colors cursor-pointer whitespace-nowrap"
+                        >
+                          <Icons.Cube size={12} />
+                          Replacement
                         </button>
                       {/if}
 
@@ -404,7 +565,7 @@
                 onclick={() => (newStatus = s)}
                 class="flex items-center gap-3 px-4 py-3 rounded-xl border text-[13px] font-medium transition-all cursor-pointer text-left
                        {newStatus === s
-                         ? s === 'Pending Validation'
+                         ? s === 'pending_validation'
                            ? 'bg-purple-50 border-purple-200 text-purple-700'
                            : 'bg-[#0B182A] border-[#0B182A] text-white'
                          : 'bg-white border-gray-200 text-gray-600 hover:border-gray-400'}"
@@ -415,8 +576,8 @@
                     <span class="w-2.5 h-2.5 rounded-full bg-current"></span>
                   {/if}
                 </span>
-                {s}
-                {#if s === 'Pending Validation'}
+                {statusLabel(s)}
+                {#if s === 'pending_validation'}
                   <span class="ml-auto text-[10px] font-semibold opacity-60">Sends to admin</span>
                 {/if}
               </button>
@@ -452,11 +613,11 @@
 {/if}
 
 <!-- ── Escalation / Request Support Modal ────────────────────────────────── -->
-{#if escalateTicket}
+{#if escalateModal}
   <div
     class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
     role="presentation"
-    onclick={() => (escalateTicket = null)}
+    onclick={() => (escalateModal = null)}
   >
     <div
       class="bg-white rounded-2xl w-full max-w-sm shadow-2xl"
@@ -468,12 +629,12 @@
       <div class="flex items-start justify-between px-6 py-4 border-b border-gray-100">
         <div>
           <p class="text-[11px] font-semibold text-[#E87D1F] mb-0.5">
-            {escalateTicket.ticketNumber || escalateTicket.id.slice(0, 8)}
+            {escalateModal.ticketNumber || escalateModal.id.slice(0, 8)}
           </p>
           <h2 class="text-[15px] font-semibold text-[#0B182A]">Request Support</h2>
           <p class="text-[12px] text-gray-400 mt-0.5">Escalate this ticket to a higher support level</p>
         </div>
-        <button onclick={() => (escalateTicket = null)} class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors shrink-0" aria-label="Close">
+        <button onclick={() => (escalateModal = null)} class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors shrink-0" aria-label="Close">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
@@ -525,7 +686,7 @@
       </div>
 
       <div class="flex justify-end gap-3 px-6 pb-5 border-t border-gray-100 pt-4">
-        <button onclick={() => (escalateTicket = null)} class="px-5 py-2.5 text-[13px] text-gray-600 border border-gray-200 rounded-lg hover:border-gray-400 transition-colors cursor-pointer">
+        <button onclick={() => (escalateModal = null)} class="px-5 py-2.5 text-[13px] text-gray-600 border border-gray-200 rounded-lg hover:border-gray-400 transition-colors cursor-pointer">
           Cancel
         </button>
         <button
@@ -541,7 +702,7 @@
   </div>
 {/if}
 
-<!-- ── Upload Proof Modal ─────────────────────────────────────────────────── -->
+<!-- ── Upload Ticket Documents Modal ──────────────────────────────────────── -->
 {#if uploadTicket}
   <div
     class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
@@ -549,10 +710,11 @@
     onclick={() => (uploadTicket = null)}
   >
     <div
-      class="bg-white rounded-2xl w-full max-w-sm shadow-2xl"
+      class="bg-white rounded-2xl w-full max-w-2xl shadow-2xl"
       role="dialog"
       aria-modal="true"
-      aria-label="Upload Proof"
+      tabindex="-1"
+      aria-label="Upload Ticket Documents"
       onclick={(e) => e.stopPropagation()}
     >
       <div class="flex items-start justify-between px-6 py-4 border-b border-gray-100">
@@ -560,59 +722,266 @@
           <p class="text-[11px] font-semibold text-[#E87D1F] mb-0.5">
             {uploadTicket.ticketNumber || uploadTicket.id.slice(0, 8)}
           </p>
-          <h2 class="text-[15px] font-semibold text-[#0B182A]">Upload Work Proof</h2>
+          <h2 class="text-[15px] font-semibold text-[#0B182A]">Upload Resolution Documents</h2>
         </div>
         <button onclick={() => (uploadTicket = null)} class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors shrink-0" aria-label="Close">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
 
-      <div class="px-6 py-5">
-        {#if uploadedUrl}
-          <div class="flex flex-col items-center gap-3 py-4">
-            <div class="w-12 h-12 rounded-full bg-green-50 flex items-center justify-center">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+      <div class="px-6 py-5 flex flex-col gap-5">
+        <ClosureChecklist ticketId={uploadTicket.id} refreshKey={checklistRefreshKey} />
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <div class="border border-gray-200 rounded-2xl p-5 flex flex-col gap-4">
+            <div>
+              <h3 class="text-[14px] font-semibold text-[#0B182A]">Upload Incident Report (IR)</h3>
+              <p class="text-[12px] text-gray-400 mt-1">Accepted formats: PDF, DOC, DOCX</p>
             </div>
-            <p class="text-[13px] font-medium text-gray-700">File uploaded successfully</p>
-            <a href={uploadedUrl} target="_blank" rel="noopener noreferrer" class="text-[12px] text-[#E87D1F] hover:underline flex items-center gap-1">
-              <Icons.Eye size={13} /> View file
-            </a>
+            <label class="flex flex-col items-center gap-3 p-6 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-[#0B182A] hover:bg-gray-50 transition-colors">
+              <div class="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center">
+                <Icons.File size={20} stroke="#6b7280" />
+              </div>
+              <div class="text-center">
+                <p class="text-[13px] font-medium text-gray-700">Select IR document</p>
+                <p class="text-[11px] text-gray-400 mt-0.5">One report file per upload</p>
+              </div>
+              {#if selectedIrFile}
+                <span class="text-[12px] font-medium text-[#0B182A] bg-gray-100 px-3 py-1 rounded-full max-w-full truncate">
+                  {selectedIrFile.name}
+                </span>
+              {/if}
+              <input
+                type="file"
+                class="hidden"
+                accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                onchange={handleIrFileChange}
+                bind:this={irFileInput}
+              />
+            </label>
+            <button
+              onclick={submitIrUpload}
+              disabled={!selectedIrFile || uploadingIr}
+              class="px-4 py-2.5 text-[13px] font-semibold text-white bg-[linear-gradient(to_bottom,#0B182A,#021E44)] rounded-lg hover:opacity-90 transition-opacity disabled:opacity-60 cursor-pointer"
+            >
+              {uploadingIr ? 'Uploading…' : 'Upload Incident Report'}
+            </button>
           </div>
+
+          <div class="border border-gray-200 rounded-2xl p-5 flex flex-col gap-4">
+            <div>
+              <h3 class="text-[14px] font-semibold text-[#0B182A]">Upload Site Images</h3>
+              <p class="text-[12px] text-gray-400 mt-1">Accepted formats: JPG, PNG. Multiple images allowed.</p>
+            </div>
+            <label class="flex flex-col items-center gap-3 p-6 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-[#0B182A] hover:bg-gray-50 transition-colors">
+              <div class="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center">
+                <Icons.CloudUpload size={20} stroke="#6b7280" />
+              </div>
+              <div class="text-center">
+                <p class="text-[13px] font-medium text-gray-700">Select site images</p>
+                <p class="text-[11px] text-gray-400 mt-0.5">You can choose multiple files at once</p>
+              </div>
+              {#if selectedSiteFiles.length > 0}
+                <div class="flex flex-wrap justify-center gap-2">
+                  {#each selectedSiteFiles as file}
+                    <span class="text-[12px] font-medium text-[#0B182A] bg-gray-100 px-3 py-1 rounded-full max-w-full truncate">
+                      {file.name}
+                    </span>
+                  {/each}
+                </div>
+              {/if}
+              <input
+                type="file"
+                class="hidden"
+                accept="image/jpeg,image/png,.jpg,.jpeg,.png"
+                multiple
+                onchange={handleSiteImageChange}
+                bind:this={siteImageInput}
+              />
+            </label>
+            <button
+              onclick={submitSiteImages}
+              disabled={selectedSiteFiles.length === 0 || uploadingSiteImages}
+              class="px-4 py-2.5 text-[13px] font-semibold text-white bg-[#E87D1F] rounded-lg hover:bg-[#d06a10] transition-colors disabled:opacity-60 cursor-pointer"
+            >
+              {uploadingSiteImages ? 'Uploading…' : 'Upload Site Images'}
+            </button>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-3 pt-1 border-t border-gray-100">
+          <button onclick={() => (uploadTicket = null)} class="px-5 py-2.5 text-[13px] text-gray-600 border border-gray-200 rounded-lg hover:border-gray-400 transition-colors cursor-pointer">
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- ── Request Device Replacement Modal ──────────────────────────────────── -->
+{#if replacementModal}
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+    role="presentation"
+    onclick={() => (replacementModal = null)}
+  >
+    <div
+      class="bg-white rounded-2xl w-full max-w-sm shadow-2xl"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Request Device Replacement"
+      onclick={(e) => e.stopPropagation()}
+    >
+      <div class="flex items-start justify-between px-6 py-4 border-b border-gray-100">
+        <div>
+          <p class="text-[11px] font-semibold text-[#E87D1F] mb-0.5">
+            {replacementModal.ticketNumber || replacementModal.id.slice(0, 8)}
+          </p>
+          <h2 class="text-[15px] font-semibold text-[#0B182A]">Request Device Replacement</h2>
+          <p class="text-[12px] text-gray-400 mt-0.5">Submit a replacement request for on-site device</p>
+        </div>
+        <button onclick={() => (replacementModal = null)} class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors shrink-0" aria-label="Close">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div class="px-6 py-5 flex flex-col gap-4">
+        <label class="flex flex-col gap-1.5">
+          <span class="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Device Type</span>
+          <select class={fieldClass} bind:value={replacementDeviceType}>
+            <option value="Router">Router</option>
+            <option value="Switch">Switch</option>
+            <option value="Long Distance Device">Long Distance Device</option>
+            <option value="Other">Other</option>
+          </select>
+        </label>
+
+        <label class="flex flex-col gap-1.5">
+          <span class="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+            Reason <span class="text-red-400">*</span>
+          </span>
+          <textarea
+            bind:value={replacementReason}
+            placeholder="Describe why replacement is needed (min 20 characters)…"
+            rows="4"
+            class="{fieldClass} resize-none {replacementReasonError ? 'border-red-300' : ''}"
+          ></textarea>
+          {#if replacementReasonError}
+            <span class="text-[11px] text-red-500">{replacementReasonError}</span>
+          {:else}
+            <span class="text-[11px] text-gray-400">{replacementReason.trim().length} / 20 min chars</span>
+          {/if}
+        </label>
+      </div>
+
+      <div class="flex justify-end gap-3 px-6 pb-5 border-t border-gray-100 pt-4">
+        <button onclick={() => (replacementModal = null)} class="px-5 py-2.5 text-[13px] text-gray-600 border border-gray-200 rounded-lg hover:border-gray-400 transition-colors cursor-pointer">
+          Cancel
+        </button>
+        <button
+          onclick={submitReplacement}
+          disabled={replacingTicket}
+          class="px-5 py-2.5 text-[13px] font-semibold text-white bg-fuchsia-600 hover:bg-fuchsia-700 rounded-lg transition-colors disabled:opacity-60 cursor-pointer"
+        >
+          {replacingTicket ? 'Submitting…' : 'Submit Request'}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- ── Replacement Status Tracker Modal ───────────────────────────────────── -->
+{#if trackerTicket}
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+    role="presentation"
+    onclick={() => (trackerTicket = null)}
+  >
+    <div
+      class="bg-white rounded-2xl w-full max-w-sm shadow-2xl"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Replacement Status"
+      onclick={(e) => e.stopPropagation()}
+    >
+      <div class="flex items-start justify-between px-6 py-4 border-b border-gray-100">
+        <div>
+          <p class="text-[11px] font-semibold text-[#E87D1F] mb-0.5">
+            {trackerTicket.ticketNumber || trackerTicket.id.slice(0, 8)}
+          </p>
+          <h2 class="text-[15px] font-semibold text-[#0B182A]">Replacement Status</h2>
+        </div>
+        <button onclick={() => (trackerTicket = null)} class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors shrink-0" aria-label="Close">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div class="px-6 py-5">
+        {#if trackerLoading}
+          <div class="flex items-center justify-center gap-2 py-8 text-[13px] text-gray-400">
+            <div class="w-4 h-4 border-2 border-gray-200 border-t-fuchsia-500 rounded-full animate-spin"></div>
+            Loading…
+          </div>
+        {:else if !trackerData}
+          <p class="text-[13px] text-gray-400 py-6 text-center">No replacement data found</p>
         {:else}
-          <label class="flex flex-col items-center gap-3 p-6 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-[#0B182A] hover:bg-gray-50 transition-colors">
-            <div class="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center">
-              <Icons.CloudUpload size={20} stroke="#6b7280" />
+          <!-- Device info -->
+          <div class="flex items-center gap-3 p-3 rounded-xl bg-fuchsia-50 mb-5">
+            <Icons.Cube size={18} stroke="#a21caf" />
+            <div>
+              <p class="text-[13px] font-semibold text-fuchsia-800">{trackerData.deviceType}</p>
+              <p class="text-[11px] text-fuchsia-600 mt-0.5 line-clamp-2">{trackerData.reason}</p>
             </div>
-            <div class="text-center">
-              <p class="text-[13px] font-medium text-gray-700">Click to select a file</p>
-              <p class="text-[11px] text-gray-400 mt-0.5">Images, PDFs, or documents</p>
-            </div>
-            {#if selectedFile}
-              <span class="text-[12px] font-medium text-[#0B182A] bg-gray-100 px-3 py-1 rounded-full max-w-full truncate">
-                {selectedFile.name}
-              </span>
+          </div>
+
+          <!-- Timeline -->
+          {@const STEPS = ['pending', 'approved', 'dispatched', 'replaced'] as const}
+          {@const LABELS = { pending: 'Requested', approved: 'Approved', dispatched: 'Dispatched', replaced: 'Replaced' }}
+          {@const currentIdx = STEPS.indexOf((trackerData.status ?? 'pending') as typeof STEPS[number])}
+          <div class="flex flex-col gap-0">
+            {#each STEPS as step, i}
+              {@const done = i <= currentIdx && trackerData.status !== 'rejected'}
+              {@const active = i === currentIdx && trackerData.status !== 'rejected'}
+              <div class="flex gap-3 {i < STEPS.length - 1 ? 'pb-4' : ''}">
+                <div class="flex flex-col items-center">
+                  <div class="w-7 h-7 rounded-full flex items-center justify-center border-2 shrink-0
+                               {done ? 'bg-fuchsia-600 border-fuchsia-600' : 'bg-white border-gray-200'}">
+                    {#if done}
+                      <Icons.Check size={12} stroke="white" />
+                    {:else}
+                      <span class="w-2 h-2 rounded-full bg-gray-300"></span>
+                    {/if}
+                  </div>
+                  {#if i < STEPS.length - 1}
+                    <div class="w-0.5 flex-1 mt-1 {done ? 'bg-fuchsia-300' : 'bg-gray-200'}"></div>
+                  {/if}
+                </div>
+                <div class="pt-0.5 pb-2">
+                  <p class="text-[13px] font-semibold {active ? 'text-fuchsia-700' : done ? 'text-gray-700' : 'text-gray-400'}">
+                    {LABELS[step]}
+                  </p>
+                  {#if step === 'approved' && trackerData.poNumber}
+                    <p class="text-[11px] text-gray-400 mt-0.5">PO: {trackerData.poNumber}</p>
+                  {/if}
+                </div>
+              </div>
+            {/each}
+            {#if trackerData.status === 'rejected'}
+              <div class="flex items-center gap-2 mt-2 px-3 py-2 rounded-lg bg-red-50 border border-red-100">
+                <Icons.XSquare size={14} stroke="#dc2626" />
+                <p class="text-[12px] text-red-600 font-medium">Request rejected</p>
+              </div>
             {/if}
-            <input type="file" class="hidden" accept="image/*,.pdf,.doc,.docx" onchange={handleFileChange} bind:this={fileInput} />
-          </label>
+          </div>
         {/if}
       </div>
 
-      {#if !uploadedUrl}
-        <div class="flex justify-end gap-3 px-6 pb-5 border-t border-gray-100 pt-4">
-          <button onclick={() => (uploadTicket = null)} class="px-5 py-2.5 text-[13px] text-gray-600 border border-gray-200 rounded-lg hover:border-gray-400 transition-colors cursor-pointer">Cancel</button>
-          <button
-            onclick={submitUpload}
-            disabled={!selectedFile || uploading}
-            class="px-5 py-2.5 text-[13px] font-semibold text-white bg-[linear-gradient(to_bottom,#0B182A,#021E44)] rounded-lg hover:opacity-90 transition-opacity disabled:opacity-60 cursor-pointer"
-          >
-            {uploading ? 'Uploading…' : 'Upload Proof'}
-          </button>
-        </div>
-      {:else}
-        <div class="flex justify-end px-6 pb-5">
-          <button onclick={() => (uploadTicket = null)} class="px-5 py-2.5 text-[13px] font-semibold text-white bg-[linear-gradient(to_bottom,#0B182A,#021E44)] rounded-lg hover:opacity-90 transition-opacity cursor-pointer">Done</button>
-        </div>
-      {/if}
+      <div class="flex justify-end px-6 pb-5">
+        <button onclick={() => (trackerTicket = null)} class="px-5 py-2.5 text-[13px] text-gray-600 border border-gray-200 rounded-lg hover:border-gray-400 transition-colors cursor-pointer">
+          Close
+        </button>
+      </div>
     </div>
   </div>
 {/if}

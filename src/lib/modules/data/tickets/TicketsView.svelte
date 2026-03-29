@@ -3,12 +3,24 @@
   import * as Icons from "$lib/icons";
   import TicketForm from "./TicketForm.svelte";
   import { fetchTickets, type Ticket } from "./queries";
-  import { createTicket, updateTicket } from "./actions";
+  import { createTicket } from "./actions";
+  import { assignTicket, updateTicketStatus } from "$lib/api/tickets";
+  import { type TicketStatus } from "$lib/config/roles";
+  import { fetchProjects, type Project } from "$lib/modules/data/projects/queries";
+  import { ApiError } from "$lib/api/rest";
   import { toast } from "svelte-sonner";
+
+  interface Props {
+    canDelete?: boolean;
+  }
+
+  let { canDelete = true }: Props = $props();
 
   // ── view-model (keeps the shape TicketForm expects) ──────────────────────
   type TicketRow = {
     id: string;
+    projectId: string;
+    categoryId: string;
     issue: string;
     sub: string;
     sla: string;
@@ -23,6 +35,8 @@
   function toRow(t: Ticket): TicketRow {
     return {
       id: t.ticketNumber || t.id,
+      projectId: t.projectId ?? '',
+      categoryId: t.categoryId ?? '',
       issue: t.title,
       sub: t.author ?? "—",
       sla: t.slaDeadline
@@ -40,18 +54,28 @@
   }
 
   let tickets = $state<TicketRow[]>([]);
+  let projects = $state<Project[]>([]);
   let loading = $state(true);
 
   onMount(async () => {
     try {
-      const data = await fetchTickets();
+      const [data, projs] = await Promise.all([
+        fetchTickets(),
+        fetchProjects().catch(() => [] as Project[]),
+      ]);
       tickets = data.map(toRow);
+      projects = projs;
     } catch (err) {
       toast.error("Failed to load tickets");
     } finally {
       loading = false;
     }
   });
+
+  function projectName(id: string): string {
+    if (!id) return '—';
+    return projects.find((p) => p.id === id)?.name ?? '—';
+  }
 
   let showForm = $state(false);
   let formMode = $state<"add" | "edit">("add");
@@ -74,29 +98,51 @@
       try {
         const created = await createTicket({
           projectId: form.projectId || undefined,
+          categoryId: form.categoryId || undefined,
           title: form.issue,
-          status: form.status,
+          description: form.sub || undefined,
           priority: form.priority,
           state: form.place,
-          assignedEngineerId: form.engineer || undefined,
-          statePlannerId: form.planner || undefined,
-          author: "system",
         });
         tickets = [...tickets, toRow(created)];
         toast.success("Ticket created successfully");
       } catch (err) {
-        toast.error(`Failed to create ticket: ${(err as Error).message}`);
+        if (err instanceof ApiError && err.status === 422 && err.errors?.length) {
+          toast.error(err.errors.map((field) => field.message).join(", "));
+        } else if (err instanceof ApiError && err.status === 403) {
+          toast.error('Invalid project access');
+        } else {
+          toast.error(`Failed to create ticket: ${(err as Error).message}`);
+        }
         return;
       }
     } else if (editData) {
       try {
-        const updated = await updateTicket({
-          id: editData.id,
-          status: form.status,
-          priority: form.priority,
-          assignedEngineerId: form.engineer || undefined,
-          statePlannerId: form.planner || undefined,
-        });
+        const assignmentChanged =
+          (form.engineer || '') !== (editData.engineer || '') ||
+          (form.planner || '') !== (editData.planner || '');
+        const statusChanged = (form.status || '') !== (editData.status || '');
+        let updated: Ticket | null = null;
+
+        if (assignmentChanged) {
+          updated = await assignTicket(editData.id, {
+            engineerId: form.engineer || undefined,
+            statePlannerId: form.planner || undefined,
+          });
+        }
+
+        if (statusChanged) {
+          updated = await updateTicketStatus(
+            editData.id,
+            form.status as TicketStatus,
+          );
+        }
+
+        if (!updated) {
+          toast.success("No ticket changes to save");
+          showForm = false;
+          return;
+        }
         tickets = tickets.map((t) => (t.id === editData!.id ? { ...t, ...toRow(updated) } : t));
         toast.success("Ticket updated");
       } catch (err) {
@@ -108,7 +154,7 @@
   }
 </script>
 
-<div class="flex flex-col gap-5">
+<div class="flex flex-col gap-5" data-can-delete={canDelete}>
   <!-- Filter Bar -->
   <div class="flex items-center gap-3 flex-wrap bg-white rounded-xl px-5 py-4 shadow">
     <!-- Search -->
@@ -173,20 +219,21 @@
       <table class="w-full text-sm border-collapse">
         <thead>
           <tr class="border-b border-gray-100">
-            {#each ["TICKET ID", "ISSUE", "SLA", "PLACE", "ENGINEER", "STATUS", "PRIORITY", "DATE", "ACTIONS"] as col}
+            {#each ["TICKET ID", "PROJECT", "ISSUE", "SLA", "PLACE", "ENGINEER", "STATUS", "PRIORITY", "DATE", "ACTIONS"] as col}
               <th class="text-left text-[11px] font-semibold text-gray-400 tracking-wide py-3 px-3 whitespace-nowrap">{col}</th>
             {/each}
           </tr>
         </thead>
         <tbody>
           {#if loading}
-            <tr><td colspan="9" class="py-10 text-center text-[13px] text-gray-400">Loading…</td></tr>
+            <tr><td colspan="10" class="py-10 text-center text-[13px] text-gray-400">Loading…</td></tr>
           {:else if tickets.length === 0}
-            <tr><td colspan="9" class="py-10 text-center text-[13px] text-gray-400">No tickets yet</td></tr>
+            <tr><td colspan="10" class="py-10 text-center text-[13px] text-gray-400">No tickets yet</td></tr>
           {:else}
           {#each tickets as ticket}
             <tr class="border-b border-gray-50 hover:bg-gray-50 transition-colors">
               <td class="py-3 px-3 text-accent font-medium text-[13px]">{ticket.id}</td>
+              <td class="py-3 px-3 text-[13px] text-gray-600 whitespace-nowrap">{projectName(ticket.projectId)}</td>
               <td class="py-3 px-3">
                 <div class="text-[13px] text-gray-700 font-medium">{ticket.issue}</div>
                 <div class="text-[11px] text-gray-400">{ticket.sub}</div>

@@ -1,4 +1,5 @@
 import { writable, derived } from 'svelte/store';
+import { patchNotificationRead, patchAllNotificationsRead } from '$lib/api/notifications';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -24,6 +25,12 @@ function createNotificationStore() {
   return {
     subscribe,
 
+    /** Bulk-load notifications from the backend (replaces current list). */
+    seed(items: Notification[]) {
+      set(items);
+    },
+
+    /** Prepend a new client-side notification (e.g. after a REST action). */
     push(n: NewNotification) {
       update((items) => [
         {
@@ -36,12 +43,16 @@ function createNotificationStore() {
       ]);
     },
 
+    /** Mark one notification as read locally and sync to backend. */
     markRead(id: string) {
       update((items) => items.map((n) => (n.id === id ? { ...n, read: true } : n)));
+      patchNotificationRead(id);
     },
 
+    /** Mark all notifications as read locally and sync to backend. */
     markAllRead() {
       update((items) => items.map((n) => ({ ...n, read: true })));
+      patchAllNotificationsRead();
     },
 
     remove(id: string) {

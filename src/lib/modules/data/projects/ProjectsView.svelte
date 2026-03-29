@@ -6,9 +6,16 @@
   import { createProject } from "./actions";
   import { toast } from "svelte-sonner";
 
+  interface Props {
+    canDelete?: boolean;
+  }
+
+  let { canDelete = true }: Props = $props();
+
   // ── view-model (keeps the shape ProjectForm expects) ─────────────────────
   type Project = {
     id: string;
+    customerId: string;
     name: string;
     customer: string;
     location: string;
@@ -22,8 +29,9 @@
   function toRow(p: ApiProject): Project {
     return {
       id: p.id,
+      customerId: p.customerId,
       name: p.name,
-      customer: p.customerId,   // resolved to name once customer list is available
+      customer: p.customerId,
       location: "—",
       sla: "—",
       tickets: 0,
@@ -66,21 +74,23 @@
 
   async function handleSave(form: Record<string, unknown>) {
     if (formMode === "add") {
+      if (!form.customerId) {
+        toast.error("Please select a customer");
+        return;
+      }
       try {
-        // customerId is not yet captured in the form; passing empty string until
-        // the form is extended with a customer ID lookup/dropdown.
         const created = await createProject({
-          customerId: "",
+          customerId: form.customerId as string,
           name: form.name as string,
           author: "system",
         });
-        const newId = created.id;
         projects = [
           ...projects,
           {
-            id: newId,
+            id: created.id,
+            customerId: form.customerId as string,
             name: form.name as string,
-            customer: form.customer as string,
+            customer: form.customerId as string,
             location: form.location as string,
             sla: form.sla as string,
             status: form.status as string,
@@ -99,8 +109,9 @@
         p.id === editData!.id
           ? {
               ...p,
+              customerId: (form.customerId as string) || p.customerId,
               name: form.name as string,
-              customer: form.customer as string,
+              customer: (form.customerId as string) || p.customerId,
               location: form.location as string,
               sla: form.sla as string,
               status: form.status as string,
@@ -113,7 +124,7 @@
   }
 </script>
 
-<div class="flex flex-col gap-5">
+<div class="flex flex-col gap-5" data-can-delete={canDelete}>
   <!-- Filter Bar -->
   <div class="flex items-center gap-3 flex-wrap bg-white rounded-xl px-5 py-4 shadow">
     <div class="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg flex-1 max-w-100">
@@ -308,7 +319,7 @@
 {#if showForm}
   <ProjectForm
     mode={formMode}
-    data={editData}
+    data={editData ? { ...editData } : null}
     onSave={handleSave}
     onClose={() => (showForm = false)}
   />

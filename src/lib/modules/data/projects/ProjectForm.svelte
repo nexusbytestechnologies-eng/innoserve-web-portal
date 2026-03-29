@@ -1,9 +1,11 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import * as Icons from "$lib/icons";
+  import { fetchCustomers, type Customer } from "$lib/modules/data/customers/queries";
 
   interface ProjectFormData {
+    customerId?: string;
     name?: string;
-    customer?: string;
     location?: string;
     sla?: string;
     status?: string;
@@ -24,9 +26,24 @@
 
   const allTags = ["Hardware", "Networking", "Software", "Electrical", "Deployment"];
 
+  let customers = $state<Customer[]>([]);
+  let loadingCustomers = $state(false);
+
+  onMount(async () => {
+    loadingCustomers = true;
+    try {
+      const all = await fetchCustomers();
+      customers = all.filter((c) => c.status === 'active');
+    } catch {
+      // non-critical — dropdown falls back to empty
+    } finally {
+      loadingCustomers = false;
+    }
+  });
+
   let form = $state({
+    customerId: (data?.customerId as string) ?? "",
     name: (data?.name as string) ?? "",
-    customer: (data?.customer as string) ?? "",
     location: (data?.location as string) ?? "",
     sla: (data?.sla as string) ?? "4h Response",
     status: (data?.status as string) ?? "Active",
@@ -46,7 +63,7 @@
   function validate() {
     errors = {};
     if (!form.name.trim()) errors.name = "Project name is required";
-    if (!form.customer.trim()) errors.customer = "Customer is required";
+    if (!form.customerId) errors.customerId = "Customer is required";
     if (!form.location.trim()) errors.location = "Location is required";
     return Object.keys(errors).length === 0;
   }
@@ -113,16 +130,22 @@
         {#if errors.name}<span class={errorClass}>{errors.name}</span>{/if}
       </label>
 
-      <!-- Customer -->
+      <!-- Customer dropdown -->
       <label class={labelClass}>
         <span class={labelTextClass}>Customer <span class="text-red-400">*</span></span>
-        <input
-          type="text"
-          placeholder="e.g. HDFC Bank"
-          class={fieldClass}
-          bind:value={form.customer}
-        />
-        {#if errors.customer}<span class={errorClass}>{errors.customer}</span>{/if}
+        {#if loadingCustomers}
+          <div class="px-3.5 py-2.5 border border-gray-200 rounded-lg text-[13px] text-gray-400 bg-gray-50">Loading customers…</div>
+        {:else if customers.length === 0}
+          <div class="px-4 py-3 rounded-lg bg-amber-50 border border-amber-200 text-[13px] text-amber-700">No active customers available</div>
+        {:else}
+          <select class={fieldClass} bind:value={form.customerId}>
+            <option value="">— Select Customer —</option>
+            {#each customers as c}
+              <option value={c.id}>{c.companyName}</option>
+            {/each}
+          </select>
+        {/if}
+        {#if errors.customerId}<span class={errorClass}>{errors.customerId}</span>{/if}
       </label>
 
       <!-- Row: Location + SLA -->
@@ -187,7 +210,8 @@
         </button>
         <button
           type="submit"
-          class="px-5 py-2.5 text-[13px] text-white font-semibold bg-[#E87D1F] hover:bg-[#d06a10] rounded-lg transition-colors cursor-pointer"
+          disabled={loadingCustomers || customers.length === 0}
+          class="px-5 py-2.5 text-[13px] text-white font-semibold bg-[#E87D1F] hover:bg-[#d06a10] rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {mode === "add" ? "Add Project" : "Save Changes"}
         </button>

@@ -17,9 +17,14 @@
   let form = $state({
     company: data?.companyName ?? "",
     contact: data?.contactPersonName ?? "",
+    email: data?.email ?? "",
     phone: data?.phone ?? "",
-    location: data?.addressState ?? "",
-    status: data?.status ?? "Active",
+    addressState: data?.addressState ?? "",
+    addressCity: data?.addressCity ?? "",
+    addressPincode: data?.addressPincode ?? "",
+    secondaryContactName: data?.secondaryContactName ?? "",
+    secondaryContactEmail: data?.secondaryContactEmail ?? "",
+    secondaryContactPhone: data?.secondaryContactPhone ?? "",
   });
 
   let errors = $state<Record<string, string>>({});
@@ -30,7 +35,7 @@
     if (!form.contact.trim()) errors.contact = "Contact person is required";
     if (!form.phone.trim()) errors.phone = "Phone number is required";
     else if (!/^\+?\d[\d\s\-]{7,}$/.test(form.phone)) errors.phone = "Enter a valid phone number";
-    if (!form.location.trim()) errors.location = "Location is required";
+    if (!form.addressState.trim()) errors.addressState = "State is required";
     return Object.keys(errors).length === 0;
   }
 
@@ -84,62 +89,77 @@
 
     <!-- Body -->
     <form class="px-6 py-5 flex flex-col gap-4 overflow-y-auto" onsubmit={handleSubmit}>
+
+      <!-- Section: Primary Contact -->
+      <p class="text-[11px] font-bold text-gray-400 uppercase tracking-widest -mb-1">Primary Contact</p>
+
       <!-- Company Name -->
       <label class={labelClass}>
         <span class={labelTextClass}>Company Name <span class="text-red-400">*</span></span>
-        <input
-          type="text"
-          placeholder="e.g. HDFC Bank"
-          class={fieldClass}
-          bind:value={form.company}
-        />
+        <input type="text" placeholder="e.g. HDFC Bank" class={fieldClass} bind:value={form.company} />
         {#if errors.company}<span class={errorClass}>{errors.company}</span>{/if}
       </label>
 
       <!-- Contact Person -->
       <label class={labelClass}>
         <span class={labelTextClass}>Contact Person <span class="text-red-400">*</span></span>
-        <input
-          type="text"
-          placeholder="e.g. Arun Kumar"
-          class={fieldClass}
-          bind:value={form.contact}
-        />
+        <input type="text" placeholder="e.g. Arun Kumar" class={fieldClass} bind:value={form.contact} />
         {#if errors.contact}<span class={errorClass}>{errors.contact}</span>{/if}
       </label>
 
-      <!-- Row: Phone + Location -->
+      <!-- Row: Email + Phone -->
       <div class="grid grid-cols-2 gap-4">
         <label class={labelClass}>
-          <span class={labelTextClass}>Phone Number <span class="text-red-400">*</span></span>
-          <input
-            type="text"
-            placeholder="+91 9999999999"
-            class={fieldClass}
-            bind:value={form.phone}
-          />
-          {#if errors.phone}<span class={errorClass}>{errors.phone}</span>{/if}
+          <span class={labelTextClass}>Email</span>
+          <input type="email" placeholder="e.g. arun@hdfc.com" class={fieldClass} bind:value={form.email} />
         </label>
         <label class={labelClass}>
-          <span class={labelTextClass}>Location / State <span class="text-red-400">*</span></span>
-          <input
-            type="text"
-            placeholder="e.g. Kerala"
-            class={fieldClass}
-            bind:value={form.location}
-          />
-          {#if errors.location}<span class={errorClass}>{errors.location}</span>{/if}
+          <span class={labelTextClass}>Phone <span class="text-red-400">*</span></span>
+          <input type="text" placeholder="+91 9999999999" class={fieldClass} bind:value={form.phone} />
+          {#if errors.phone}<span class={errorClass}>{errors.phone}</span>{/if}
         </label>
       </div>
 
-      <!-- Status -->
+      <!-- Section: Address -->
+      <p class="text-[11px] font-bold text-gray-400 uppercase tracking-widest -mb-1">Address</p>
+
+      <!-- Row: State + City -->
+      <div class="grid grid-cols-2 gap-4">
+        <label class={labelClass}>
+          <span class={labelTextClass}>State <span class="text-red-400">*</span></span>
+          <input type="text" placeholder="e.g. Kerala" class={fieldClass} bind:value={form.addressState} />
+          {#if errors.addressState}<span class={errorClass}>{errors.addressState}</span>{/if}
+        </label>
+        <label class={labelClass}>
+          <span class={labelTextClass}>City</span>
+          <input type="text" placeholder="e.g. Kochi" class={fieldClass} bind:value={form.addressCity} />
+        </label>
+      </div>
+
+      <!-- Pincode -->
       <label class={labelClass}>
-        <span class={labelTextClass}>Status</span>
-        <select class={fieldClass} bind:value={form.status}>
-          <option value="Active">Active</option>
-          <option value="Inactive">Inactive</option>
-        </select>
+        <span class={labelTextClass}>Pincode</span>
+        <input type="text" placeholder="e.g. 682001" class={fieldClass} bind:value={form.addressPincode} />
       </label>
+
+      <!-- Section: Secondary Contact -->
+      <p class="text-[11px] font-bold text-gray-400 uppercase tracking-widest -mb-1">Secondary Contact <span class="normal-case font-normal">(optional)</span></p>
+
+      <label class={labelClass}>
+        <span class={labelTextClass}>Name</span>
+        <input type="text" placeholder="e.g. Priya Nair" class={fieldClass} bind:value={form.secondaryContactName} />
+      </label>
+
+      <div class="grid grid-cols-2 gap-4">
+        <label class={labelClass}>
+          <span class={labelTextClass}>Email</span>
+          <input type="email" placeholder="e.g. priya@hdfc.com" class={fieldClass} bind:value={form.secondaryContactEmail} />
+        </label>
+        <label class={labelClass}>
+          <span class={labelTextClass}>Phone</span>
+          <input type="text" placeholder="+91 9999999999" class={fieldClass} bind:value={form.secondaryContactPhone} />
+        </label>
+      </div>
 
       <!-- Footer -->
       <div class="flex justify-end gap-3 pt-2 border-t border-gray-100 mt-1">

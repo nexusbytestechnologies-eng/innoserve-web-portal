@@ -7,6 +7,12 @@
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import EngineerDocumentsModal from "./EngineerDocumentsModal.svelte";
 
+  interface Props {
+    canDelete?: boolean;
+  }
+
+  let { canDelete = true }: Props = $props();
+
   let engineers = $state<EngineerProfile[]>([]);
   let loading = $state(true);
 
@@ -89,7 +95,7 @@
   }
 </script>
 
-<div class="flex flex-col gap-5">
+<div class="flex flex-col gap-5" data-can-delete={canDelete}>
   <!-- Stat Pills -->
   <div class="flex gap-3 flex-wrap">
     <div class="bg-white rounded-xl px-5 py-3 shadow flex items-center gap-3">

@@ -2,13 +2,19 @@
   import { onMount } from "svelte";
   import * as Icons from "$lib/icons";
   import { authStore } from "$lib/stores/auth";
-  import { fetchUsersByRole, type User } from "./queries";
+  import {
+    fetchTicketCategories,
+    fetchUsersByRole,
+    type TicketCategory,
+    type User,
+  } from "./queries";
   import { fetchProjects, type Project } from "$lib/modules/data/projects/queries";
   import { ROLE_STATUS_OPTIONS, TICKET_STATUS_LABELS } from "$lib/config/roles";
   import { toast } from "svelte-sonner";
 
   interface TicketFormData {
     projectId?: string;
+    categoryId?: string;
     issue?: string;
     sub?: string;
     sla?: string;
@@ -44,41 +50,51 @@
   let engineers = $state<User[]>([]);
   let planners = $state<User[]>([]);
   let projects = $state<Project[]>([]);
+  let categories = $state<TicketCategory[]>([]);
   let loadingUsers = $state(false);
   let loadingProjects = $state(false);
+  let loadingCategories = $state(false);
 
   onMount(async () => {
     loadingUsers = true;
     loadingProjects = true;
+    loadingCategories = true;
     try {
-      const [eng, plan, projs] = await Promise.all([
+      const [eng, plan, projs, ticketCats] = await Promise.all([
         fetchUsersByRole("engineer"),
         fetchUsersByRole("state_planner"),
         fetchProjects(),
+        fetchTicketCategories(),
       ]);
       engineers = eng;
       planners = plan;
       projects = projs;
+      categories = ticketCats;
       if (projs.length === 1 && !form.projectId) {
         form.projectId = projs[0].id;
+      }
+      if (ticketCats.length > 0 && !form.categoryId) {
+        form.categoryId = ticketCats[0].id;
       }
     } catch {
       // non-critical — dropdowns fall back to empty
     } finally {
       loadingUsers = false;
       loadingProjects = false;
+      loadingCategories = false;
     }
   });
 
   let form = $state({
     projectId: data?.projectId ?? "",
+    categoryId: data?.categoryId ?? "",
     issue: data?.issue ?? "",
     sub: data?.sub ?? "",
     sla: data?.sla ?? "On Track",
     place: data?.place ?? "",
     engineer: data?.engineer ?? "",
     planner: data?.planner ?? "",
-    status: data?.status ?? "Open",
+    status: data?.status ?? "open",
     priority: data?.priority ?? "Medium",
     date: data?.date ?? new Date().toLocaleDateString("en-GB"),
   });
@@ -88,6 +104,7 @@
   function validate() {
     errors = {};
     if (!form.projectId) errors.projectId = "Project is required";
+    if (!form.categoryId) errors.categoryId = "Call type is required";
     if (!form.issue.trim()) errors.issue = "Issue is required";
     if (!form.sub.trim()) errors.sub = "Customer / Subscriber is required";
     if (!form.place.trim()) errors.place = "Place / State is required";
@@ -185,6 +202,28 @@
         </label>
       {/if}
 
+      <!-- Call Type -->
+      {#if loadingCategories}
+        <div class={labelClass}>
+          <span class={labelTextClass}>Call Type <span class="text-red-400">*</span></span>
+          <div class="px-3.5 py-2.5 border border-gray-200 rounded-lg text-[13px] text-gray-400 bg-gray-50">Loading call types…</div>
+        </div>
+      {:else if categories.length === 0}
+        <div class="px-4 py-3 rounded-lg bg-amber-50 border border-amber-200 text-[13px] text-amber-700 font-medium">
+          No call types available. Please contact admin.
+        </div>
+      {:else}
+        <label class={labelClass}>
+          <span class={labelTextClass}>Call Type <span class="text-red-400">*</span></span>
+          <select class={fieldClass} bind:value={form.categoryId}>
+            {#each categories as c}
+              <option value={c.id}>{c.name}</option>
+            {/each}
+          </select>
+          {#if errors.categoryId}<span class={errorClass}>{errors.categoryId}</span>{/if}
+        </label>
+      {/if}
+
       <!-- Issue -->
       <label class={labelClass}>
         <span class={labelTextClass}>Issue / Title <span class="text-red-400">*</span></span>
@@ -275,7 +314,7 @@
         </button>
         <button
           type="submit"
-          disabled={!loadingProjects && projects.length === 0}
+          disabled={(!loadingProjects && projects.length === 0) || (!loadingCategories && categories.length === 0)}
           class="px-5 py-2.5 text-[13px] text-white font-semibold bg-[linear-gradient(to_bottom,#0B182A,#021E44)] rounded-lg hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {mode === "add" ? "Create Ticket" : "Save Changes"}

@@ -1,0 +1,32 @@
+<script lang="ts">
+  import { authStore } from '$lib/stores/auth';
+
+  const user = $derived($authStore.user);
+</script>
+
+<svelte:head><title>National Head · Innoserve Techsol</title></svelte:head>
+
+<div class="flex flex-col gap-6">
+  <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+    <h2 class="text-[20px] font-bold text-[#0B182A] mb-1">
+      Welcome back, {user?.name ?? 'National Head'} 👋
+    </h2>
+    <p class="text-[14px] text-gray-500">
+      You have full operational oversight across projects with read and write access, excluding delete actions.
+    </p>
+  </div>
+
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    {#each [
+      { label: 'Total Tickets', value: '—', color: 'bg-blue-50 text-blue-700' },
+      { label: 'Active Engineers', value: '—', color: 'bg-emerald-50 text-emerald-700' },
+      { label: 'Open Projects', value: '—', color: 'bg-amber-50 text-amber-700' },
+      { label: 'Customers', value: '—', color: 'bg-purple-50 text-purple-700' }
+    ] as stat}
+      <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+        <p class="text-[13px] text-gray-500 mb-1">{stat.label}</p>
+        <p class="text-[28px] font-bold {stat.color.split(' ')[1]}">{stat.value}</p>
+      </div>
+    {/each}
+  </div>
+</div>
