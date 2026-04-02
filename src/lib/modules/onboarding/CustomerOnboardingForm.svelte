@@ -255,6 +255,7 @@
   {:else if !phoneGateCleared}
     <!-- ── Phone Verification Gate ── -->
     <PhoneOtpVerifier
+      flow="customer"
       onVerified={(email) => {
         form.email = email;
         phoneGateCleared = true;
