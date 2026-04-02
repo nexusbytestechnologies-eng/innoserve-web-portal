@@ -4,10 +4,13 @@
   import { toast } from 'svelte-sonner';
   import { authStore } from '$lib/stores/auth';
   import { fetchTickets, type Ticket } from '$lib/modules/data/tickets/queries';
-  import { createTicketHistory } from '$lib/modules/data/tickets/actions';
-  import { escalateTicket, updateTicketStatus, uploadTicketAttachment } from '$lib/api/tickets';
   import {
+    createTicketHistory,
     requestReplacement,
+    uploadTicketAttachment,
+  } from '$lib/modules/data/tickets/actions';
+  import { escalateTicket, updateTicketStatus } from '$lib/api/tickets';
+  import {
     fetchTicketReplacement,
     type ReplacementRequest,
   } from '$lib/api/replacements';
@@ -15,6 +18,7 @@
   import { ApiError } from '$lib/api/rest';
   import { fetchProjects, type Project } from '$lib/modules/data/projects/queries';
   import ClosureChecklist from '$lib/modules/data/tickets/ClosureChecklist.svelte';
+  import { queryVersion } from '$lib/stores/query';
 
   const user = $derived($authStore.user);
 
@@ -54,12 +58,8 @@
   let escalationReason = $state('');
   let escalating = $state(false);
 
-  // Device replacement modal
-  let replacementModal = $state<Ticket | null>(null);
-  let replacementDeviceType = $state('Router');
-  let replacementReason = $state('');
-  let replacementReasonError = $state('');
   let replacingTicket = $state(false);
+  let replacingTicketId = $state<string | null>(null);
 
   // Replacement status tracker
   let trackerTicket = $state<Ticket | null>(null);
@@ -75,22 +75,40 @@
   let uploadingIr = $state(false);
   let uploadingSiteImages = $state(false);
   let checklistRefreshKey = $state(0);
+  let lastSeenTicketsVersion = $state<number | null>(null);
 
   // ── Load ──────────────────────────────────────────────────────────────────
 
+  async function loadTickets() {
+    const all = await fetchTickets();
+    tickets = user ? all.filter((t) => t.assignedEngineerId === user.id) : all;
+  }
+
   onMount(async () => {
     try {
-      const [all, projs] = await Promise.all([
-        fetchTickets(),
+      const [, projs] = await Promise.all([
+        loadTickets(),
         fetchProjects().catch(() => [] as Project[]),
       ]);
-      tickets = user ? all.filter((t) => t.assignedEngineerId === user.id) : all;
       projects = projs;
     } catch (err) {
       toast.error('Failed to load tickets');
     } finally {
       loading = false;
     }
+  });
+
+  $effect(() => {
+    const version = $queryVersion.tickets;
+    if (lastSeenTicketsVersion === null) {
+      lastSeenTicketsVersion = version;
+      return;
+    }
+    if (version === lastSeenTicketsVersion) return;
+    lastSeenTicketsVersion = version;
+    void loadTickets().catch(() => {
+      toast.error('Failed to refresh tickets');
+    });
   });
 
   function projectName(id: string): string {
@@ -307,36 +325,20 @@
 
   // ── Device Replacement ────────────────────────────────────────────────────
 
-  function openReplacement(ticket: Ticket) {
-    replacementModal = ticket;
-    replacementDeviceType = 'Router';
-    replacementReason = '';
-    replacementReasonError = '';
-  }
-
-  async function submitReplacement() {
-    if (!replacementModal) return;
-    if (replacementReason.trim().length < 20) {
-      replacementReasonError = 'Reason must be at least 20 characters';
-      return;
-    }
-    replacementReasonError = '';
+  async function requestTicketReplacement(ticket: Ticket) {
     replacingTicket = true;
+    replacingTicketId = ticket.id;
     try {
-      await requestReplacement(replacementModal.id, {
-        deviceType: replacementDeviceType,
-        reason: replacementReason.trim(),
-      });
-      // Update ticket status in local list
+      await requestReplacement(ticket.id);
       tickets = tickets.map((t) =>
-        t.id === replacementModal!.id ? { ...t, status: 'pending_replacement' } : t,
+        t.id === ticket.id ? { ...t, status: 'pending_replacement' } : t,
       );
-      toast.success('Replacement request submitted. Ticket status updated to Pending Replacement.');
-      replacementModal = null;
+      toast.success('Replacement request submitted successfully');
     } catch (err) {
       toast.error(`Failed: ${(err as Error).message}`);
     } finally {
       replacingTicket = false;
+      replacingTicketId = null;
     }
   }
 
@@ -445,73 +447,14 @@
                 <td class="py-3 px-3">
                   {#if canAct(t)}
                     <div class="flex gap-1.5 flex-wrap">
-                      <!-- Status update — only if not already closed/cancelled -->
-                      <button
-                        onclick={() => openStatus(t)}
-                        class="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 transition-colors cursor-pointer whitespace-nowrap"
-                      >
-                        <Icons.Edit size={12} />
-                        Status
-                      </button>
-
-                      <!-- Upload proof -->
-                      <button
-                        onclick={() => openUpload(t)}
-                        class="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors cursor-pointer whitespace-nowrap"
-                      >
-                        <Icons.Upload size={12} />
-                        Docs
-                      </button>
-
-                      <!-- Send for Validation — only when resolved -->
-                      {#if normalizeStatus(t.status) === 'resolved'}
-                        <button
-                          onclick={() => sendForValidation(t)}
-                          disabled={sendingValidation === t.id}
-                          title="Send ticket for admin validation"
-                          class="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg bg-purple-50 text-purple-700 hover:bg-purple-100 transition-colors cursor-pointer whitespace-nowrap disabled:opacity-60"
-                        >
-                          <Icons.CheckCircle size={12} />
-                          {sendingValidation === t.id ? 'Sending…' : 'Validate'}
-                        </button>
-                      {/if}
-
-                      <!-- Device Replacement -->
                       {#if normalizeStatus(t.status) === 'in_progress'}
                         <button
-                          onclick={() => openReplacement(t)}
-                          class="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg bg-fuchsia-50 text-fuchsia-700 hover:bg-fuchsia-100 transition-colors cursor-pointer whitespace-nowrap"
+                          onclick={() => requestTicketReplacement(t)}
+                          disabled={replacingTicketId === t.id}
+                          class="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg bg-fuchsia-50 text-fuchsia-700 hover:bg-fuchsia-100 transition-colors cursor-pointer whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed"
                         >
                           <Icons.Cube size={12} />
-                          Replace
-                        </button>
-                      {:else if normalizeStatus(t.status) === 'pending_replacement'}
-                        <button
-                          onclick={() => openTracker(t)}
-                          class="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg bg-fuchsia-50 text-fuchsia-700 hover:bg-fuchsia-100 transition-colors cursor-pointer whitespace-nowrap"
-                        >
-                          <Icons.Cube size={12} />
-                          Replacement
-                        </button>
-                      {/if}
-
-                      <!-- Request Support / Escalate -->
-                      {#if !t.escalationLevel}
-                        <button
-                          onclick={() => openEscalate(t)}
-                          class="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg bg-orange-50 text-orange-600 hover:bg-orange-100 transition-colors cursor-pointer whitespace-nowrap"
-                        >
-                          <Icons.AlertTriangle size={12} />
-                          Support
-                        </button>
-                      {:else}
-                        <!-- Already escalated — show level with option to change -->
-                        <button
-                          onclick={() => openEscalate(t)}
-                          class="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg {escalationBadge(t.escalationLevel)} hover:opacity-80 transition-colors cursor-pointer whitespace-nowrap"
-                        >
-                          <Icons.AlertTriangle size={12} />
-                          {t.escalationLevel}
+                          {replacingTicketId === t.id ? 'Requesting…' : 'Replace'}
                         </button>
                       {/if}
                     </div>
@@ -814,78 +757,6 @@
             Done
           </button>
         </div>
-      </div>
-    </div>
-  </div>
-{/if}
-
-<!-- ── Request Device Replacement Modal ──────────────────────────────────── -->
-{#if replacementModal}
-  <div
-    class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
-    role="presentation"
-    onclick={() => (replacementModal = null)}
-  >
-    <div
-      class="bg-white rounded-2xl w-full max-w-sm shadow-2xl"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Request Device Replacement"
-      onclick={(e) => e.stopPropagation()}
-    >
-      <div class="flex items-start justify-between px-6 py-4 border-b border-gray-100">
-        <div>
-          <p class="text-[11px] font-semibold text-[#E87D1F] mb-0.5">
-            {replacementModal.ticketNumber || replacementModal.id.slice(0, 8)}
-          </p>
-          <h2 class="text-[15px] font-semibold text-[#0B182A]">Request Device Replacement</h2>
-          <p class="text-[12px] text-gray-400 mt-0.5">Submit a replacement request for on-site device</p>
-        </div>
-        <button onclick={() => (replacementModal = null)} class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors shrink-0" aria-label="Close">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
-      </div>
-
-      <div class="px-6 py-5 flex flex-col gap-4">
-        <label class="flex flex-col gap-1.5">
-          <span class="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Device Type</span>
-          <select class={fieldClass} bind:value={replacementDeviceType}>
-            <option value="Router">Router</option>
-            <option value="Switch">Switch</option>
-            <option value="Long Distance Device">Long Distance Device</option>
-            <option value="Other">Other</option>
-          </select>
-        </label>
-
-        <label class="flex flex-col gap-1.5">
-          <span class="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
-            Reason <span class="text-red-400">*</span>
-          </span>
-          <textarea
-            bind:value={replacementReason}
-            placeholder="Describe why replacement is needed (min 20 characters)…"
-            rows="4"
-            class="{fieldClass} resize-none {replacementReasonError ? 'border-red-300' : ''}"
-          ></textarea>
-          {#if replacementReasonError}
-            <span class="text-[11px] text-red-500">{replacementReasonError}</span>
-          {:else}
-            <span class="text-[11px] text-gray-400">{replacementReason.trim().length} / 20 min chars</span>
-          {/if}
-        </label>
-      </div>
-
-      <div class="flex justify-end gap-3 px-6 pb-5 border-t border-gray-100 pt-4">
-        <button onclick={() => (replacementModal = null)} class="px-5 py-2.5 text-[13px] text-gray-600 border border-gray-200 rounded-lg hover:border-gray-400 transition-colors cursor-pointer">
-          Cancel
-        </button>
-        <button
-          onclick={submitReplacement}
-          disabled={replacingTicket}
-          class="px-5 py-2.5 text-[13px] font-semibold text-white bg-fuchsia-600 hover:bg-fuchsia-700 rounded-lg transition-colors disabled:opacity-60 cursor-pointer"
-        >
-          {replacingTicket ? 'Submitting…' : 'Submit Request'}
-        </button>
       </div>
     </div>
   </div>

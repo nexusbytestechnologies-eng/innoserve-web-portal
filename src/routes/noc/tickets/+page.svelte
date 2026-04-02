@@ -11,11 +11,12 @@
     type Ticket,
     type TicketCategory,
   } from '$lib/modules/data/tickets/queries';
-  import { createTicketHistory } from '$lib/modules/data/tickets/actions';
-  import { updateTicketStatus, validateTicket, assignTicket } from '$lib/api/tickets';
-  import type { ClosureEligibility } from '$lib/api/ticket-closure';
+  import { createTicketHistory, validateTicket } from '$lib/modules/data/tickets/actions';
+  import { updateTicketStatus, assignTicket } from '$lib/api/tickets';
+  import { checkClosureEligibility, type ClosureEligibility } from '$lib/api/ticket-closure';
   import { fetchProjects, type Project } from '$lib/modules/data/projects/queries';
   import { ApiError, restRequest } from '$lib/api/rest';
+  import { queryVersion } from '$lib/stores/query';
 
   const user = $derived($authStore.user);
 
@@ -38,6 +39,8 @@
   let actionEligibility = $state<ClosureEligibility | null>(null);
   let checklistRefreshKey = $state(0);
   let validatingTicketId  = $state<string | null>(null);
+  let closureEligibilityByTicket = $state<Record<string, ClosureEligibility>>({});
+  let loadingClosureEligibility = $state<Record<string, boolean>>({});
 
   // Assignment panel
   type User = { id: string; name: string; role: string };
@@ -83,17 +86,23 @@
     address:     '',
   });
   let formErrors = $state<Record<string, string>>({});
+  let lastSeenTicketsVersion = $state<number | null>(null);
 
   // ── Load ──────────────────────────────────────────────────────────────────
 
+  async function loadTickets() {
+    const fetchedTickets = await fetchTickets();
+    tickets = fetchedTickets;
+    await primeClosureEligibility(fetchedTickets);
+  }
+
   onMount(async () => {
     try {
-      const [fetchedTickets, fetchedProjects, fetchedCustomers] = await Promise.all([
-        fetchTickets(),
+      const [, fetchedProjects, fetchedCustomers] = await Promise.all([
+        loadTickets(),
         fetchProjects().catch(() => [] as Project[]),
         restRequest<Customer[]>('/api/customers'),
       ]);
-      tickets   = fetchedTickets;
       projects  = fetchedProjects;
       customers = fetchedCustomers.filter((c) => c.status !== 'inactive');
     } catch {
@@ -101,6 +110,19 @@
     } finally {
       loading = false;
     }
+  });
+
+  $effect(() => {
+    const version = $queryVersion.tickets;
+    if (lastSeenTicketsVersion === null) {
+      lastSeenTicketsVersion = version;
+      return;
+    }
+    if (version === lastSeenTicketsVersion) return;
+    lastSeenTicketsVersion = version;
+    void loadTickets().catch(() => {
+      toast.error('Failed to refresh tickets');
+    });
   });
 
   // ── Unassigned queue ──────────────────────────────────────────────────────
@@ -299,6 +321,47 @@
     return !['closed', 'cancelled', 'rejected', 'resolved'].includes(normalizeStatus(t.status));
   }
 
+  function canValidateResolution(t: Ticket) {
+    return normalizeStatus(t.status) === 'resolved' && user?.role === 'noc';
+  }
+
+  function needsClosureEligibility(t: Ticket) {
+    return canAct(t);
+  }
+
+  function closureEligibilityFor(ticketId: string): ClosureEligibility | null {
+    return closureEligibilityByTicket[ticketId] ?? null;
+  }
+
+  function closureBlocked(ticketId: string): boolean {
+    const eligibility = closureEligibilityFor(ticketId);
+    return !!eligibility && !eligibility.eligible;
+  }
+
+  function closureReasons(ticketId: string): string[] {
+    return closureEligibilityFor(ticketId)?.reasons ?? [];
+  }
+
+  async function loadClosureEligibility(ticketId: string): Promise<void> {
+    loadingClosureEligibility[ticketId] = true;
+    try {
+      closureEligibilityByTicket[ticketId] = await checkClosureEligibility(ticketId);
+    } catch (err) {
+      toast.error(`Failed to check closure eligibility: ${(err as Error).message}`);
+    } finally {
+      loadingClosureEligibility[ticketId] = false;
+    }
+  }
+
+  async function primeClosureEligibility(list: Ticket[]): Promise<void> {
+    const ids = list
+      .filter(needsClosureEligibility)
+      .map((ticket) => ticket.id)
+      .filter((id) => !closureEligibilityByTicket[id]);
+
+    await Promise.all(ids.map((id) => loadClosureEligibility(id)));
+  }
+
   // ── Action modal (approve / close) ────────────────────────────────────────
 
   function openApprove(ticket: Ticket) {
@@ -325,6 +388,7 @@
       });
       const updated = await updateTicketStatus(actionTicket.id, 'closed', actionRemarks.trim() || defaultRemarks);
       tickets = tickets.map((t) => (t.id === updated.id ? { ...t, ...updated } : t));
+      await loadClosureEligibility(actionTicket.id);
       toast.success(actionType === 'approve' ? 'Ticket approved and closed' : 'Ticket closed');
       actionTicket = null;
     } catch (err) {
@@ -338,6 +402,7 @@
     validatingTicketId = ticket.id;
     try {
       await validateTicket(ticket.id, 'Validated by NOC');
+      await loadClosureEligibility(ticket.id);
       checklistRefreshKey += 1;
       toast.success('NOC validation completed');
     } catch (err) {
@@ -542,51 +607,22 @@
                     <td class="py-3 px-3">
                       {#if canAct(t)}
                         <div class="flex gap-1.5 flex-wrap">
-                          {#if canAssign(t)}
-                            <button
-                              onclick={() => openAssign(t)}
-                              class="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg bg-orange-50 text-orange-700 hover:bg-orange-100 transition-colors cursor-pointer whitespace-nowrap"
-                            >
-                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                              Assign
-                            </button>
-                          {/if}
-                          {#if canEscalate(t)}
-                            <button
-                              onclick={() => openEscalate(t)}
-                              class="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 transition-colors cursor-pointer whitespace-nowrap"
-                            >
-                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 11 21 7 17 3"/><line x1="21" y1="7" x2="9" y2="7"/><polyline points="7 21 3 17 7 13"/><line x1="15" y1="17" x2="3" y2="17"/></svg>
-                              Escalate
-                            </button>
-                          {/if}
-                          {#if normalizeStatus(t.status) === 'resolved'}
+                          {#if canValidateResolution(t)}
                             <button
                               onclick={() => handleValidateResolution(t)}
-                              disabled={validatingTicketId === t.id}
-                              class="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors cursor-pointer whitespace-nowrap disabled:opacity-60"
+                              disabled={validatingTicketId === t.id || loadingClosureEligibility[t.id] || closureBlocked(t.id)}
+                              class="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors cursor-pointer whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed"
                             >
                               <Icons.CheckCircle size={12} />
                               {validatingTicketId === t.id ? 'Validating…' : 'Validate'}
                             </button>
                           {/if}
-                          {#if normalizeStatus(t.status) === 'pending_validation'}
-                            <button
-                              onclick={() => openApprove(t)}
-                              class="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg bg-green-50 text-green-700 hover:bg-green-100 transition-colors cursor-pointer whitespace-nowrap"
-                            >
-                              <Icons.CheckCircle size={12} />
-                              Approve &amp; Close
-                            </button>
-                          {/if}
-                          <button
-                            onclick={() => openClose(t)}
-                            class="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors cursor-pointer whitespace-nowrap"
-                          >
-                            <Icons.XSquare size={12} />
-                            Close
-                          </button>
                         </div>
+                        {#if loadingClosureEligibility[t.id]}
+                          <p class="mt-1 text-[11px] text-gray-400">Checking closure eligibility…</p>
+                        {:else if closureBlocked(t.id)}
+                          <p class="mt-1 max-w-[260px] text-[11px] text-red-600">{closureReasons(t.id).join(' • ')}</p>
+                        {/if}
                       {:else}
                         <span class="text-[12px] text-gray-400">{displayStatus(t.status)}</span>
                       {/if}
@@ -718,21 +754,20 @@
       <div class="px-6 py-5 flex flex-col gap-5 overflow-y-auto">
 
         <!-- Current assignees (if any) -->
-        {@const tAny = assignTarget as any}
-        {#if tAny.engineerName || tAny.statePlannerName}
+        {#if (assignTarget as any).engineerName || (assignTarget as any).statePlannerName}
           <div class="px-4 py-3 rounded-xl bg-blue-50 border border-blue-100">
             <p class="text-[11px] font-semibold text-blue-700 mb-2">Current Assignees</p>
             <div class="flex flex-col gap-1">
-              {#if tAny.engineerName}
+              {#if (assignTarget as any).engineerName}
                 <div class="flex items-center gap-2">
                   <span class="text-[10px] font-semibold text-blue-500 uppercase tracking-wide w-20 shrink-0">Engineer</span>
-                  <span class="text-[13px] text-blue-800 font-medium">{tAny.engineerName}</span>
+                  <span class="text-[13px] text-blue-800 font-medium">{(assignTarget as any).engineerName}</span>
                 </div>
               {/if}
-              {#if tAny.statePlannerName}
+              {#if (assignTarget as any).statePlannerName}
                 <div class="flex items-center gap-2">
                   <span class="text-[10px] font-semibold text-blue-500 uppercase tracking-wide w-20 shrink-0">Planner</span>
-                  <span class="text-[13px] text-blue-800 font-medium">{tAny.statePlannerName}</span>
+                  <span class="text-[13px] text-blue-800 font-medium">{(assignTarget as any).statePlannerName}</span>
                 </div>
               {/if}
             </div>

@@ -22,6 +22,7 @@ export interface TicketValidation {
   ticketId: string;
   validatedBy: string;
   role: string;
+  remarks?: string | null;
   notes?: string | null;
   validatedAt?: string;
 }
@@ -31,6 +32,12 @@ export interface UploadTicketAttachmentInput {
   file: File;
   type: 'ir_report' | 'site_image';
   author?: string;
+}
+
+export interface CreateTicketAttachmentInput {
+  ticketId: string;
+  fileUrl: string;
+  type: 'ir_report' | 'site_image';
 }
 
 export async function updateTicketStatus(
@@ -75,11 +82,24 @@ export async function escalateTicket(
 
 export async function validateTicket(
   ticketId: string,
-  notes?: string,
+  remarks?: string,
 ): Promise<TicketValidation> {
   const result = await restRequest<TicketValidation>(`/api/tickets/${ticketId}/validate`, {
     method: 'POST',
-    body: JSON.stringify(notes?.trim() ? { notes: notes.trim() } : {}),
+    body: JSON.stringify(remarks?.trim() ? { remarks: remarks.trim() } : {}),
+  });
+  invalidate('tickets');
+  return result;
+}
+
+export async function createAttachment(
+  ticketId: string,
+  fileUrl: string,
+  type: 'ir_report' | 'site_image',
+): Promise<{ fileUrl?: string }> {
+  const result = await restRequest<{ fileUrl?: string }>(`/api/tickets/${ticketId}/attachments`, {
+    method: 'POST',
+    body: JSON.stringify({ fileUrl, type }),
   });
   invalidate('tickets');
   return result;
@@ -88,45 +108,8 @@ export async function validateTicket(
 export async function uploadTicketAttachment(
   input: UploadTicketAttachmentInput,
 ): Promise<{ fileUrl: string }> {
-  const formData = new FormData();
-  formData.append('file', input.file);
-  formData.append('type', input.type);
-  if (input.author) formData.append('author', input.author);
-
-  const directResponse = await fetch(`/api/tickets/${input.ticketId}/attachments`, {
-    method: 'POST',
-    credentials: 'include',
-    body: formData,
-  });
-
-  if (directResponse.ok) {
-    invalidate('tickets');
-    try {
-      const body = await directResponse.json() as { fileUrl?: string };
-      return { fileUrl: body.fileUrl ?? '' };
-    } catch {
-      return { fileUrl: '' };
-    }
-  }
-
-  if (![404, 405].includes(directResponse.status)) {
-    const message = await directResponse.text();
-    throw new Error(message || 'Failed to upload ticket attachment');
-  }
-
   const uploadedFileId = await uploadFile(input.file);
   const uploadedFileUrl = fileUrl(uploadedFileId);
-
-  await restRequest(`/api/attachments`, {
-    method: 'POST',
-    body: JSON.stringify({
-      ticketId: input.ticketId,
-      type: input.type,
-      fileUrl: uploadedFileUrl,
-      author: input.author,
-    }),
-  });
-
-  invalidate('tickets');
-  return { fileUrl: uploadedFileUrl };
+  const created = await createAttachment(input.ticketId, uploadedFileUrl, input.type);
+  return { fileUrl: created.fileUrl ?? uploadedFileUrl };
 }
