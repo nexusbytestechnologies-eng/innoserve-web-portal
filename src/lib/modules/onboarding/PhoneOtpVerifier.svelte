@@ -1,8 +1,10 @@
 <script lang="ts">
   let {
     onVerified,
+    flow,
   }: {
     onVerified: (email: string) => void;
+    flow: "customer" | "engineer";
   } = $props();
 
   let email = $state("");
@@ -42,7 +44,7 @@
       const res = await fetch("/api/otp/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, flow }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message ?? "Failed to send OTP.");

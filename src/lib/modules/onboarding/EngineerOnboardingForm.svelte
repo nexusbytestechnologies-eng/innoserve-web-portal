@@ -393,6 +393,7 @@
   {:else if !phoneGateCleared}
     <!-- ── Phone Verification Gate ── -->
     <PhoneOtpVerifier
+      flow="engineer"
       onVerified={(email) => {
         form.email = email;
         phoneGateCleared = true;
