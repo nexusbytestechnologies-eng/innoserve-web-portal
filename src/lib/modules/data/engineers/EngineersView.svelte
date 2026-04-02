@@ -15,6 +15,7 @@
 
   let engineers = $state<EngineerProfile[]>([]);
   let loading = $state(true);
+  let showAddEngineerModal = $state(false);
 
   let pendingCount = $derived(engineers.filter(e => e.documentsStatus === "pending").length);
   let approvedCount = $derived(engineers.filter(e => e.documentsStatus === "approved").length);
@@ -113,6 +114,15 @@
       <span class="text-[13px] text-gray-500">Pending</span>
       <span class="text-[15px] font-bold text-amber-600">{pendingCount}</span>
     </div>
+    {#if canDelete}
+      <button
+        onclick={() => (showAddEngineerModal = true)}
+        class="bg-[linear-gradient(to_bottom,#0B182A,#021E44)] rounded-xl px-5 py-3 shadow flex items-center gap-3 text-white cursor-pointer hover:opacity-95 transition-opacity"
+      >
+        <Icons.UserPlus size={18} stroke="currentColor" />
+        <span class="text-[13px] font-semibold">Add Engineer</span>
+      </button>
+    {/if}
   </div>
 
   <!-- Filter Bar -->
@@ -213,4 +223,8 @@
     onConfirm={handleConfirm}
     onCancel={() => (confirmModal = null)}
   />
+{/if}
+
+{#if showAddEngineerModal}
+  <AdminAddEngineerModal onClose={() => (showAddEngineerModal = false)} />
 {/if}
