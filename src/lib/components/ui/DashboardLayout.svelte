@@ -29,6 +29,7 @@
 			{ label: 'Engineers',    href: '/admin/engineers',        icon: 'hardhat' },
 			{ label: 'Projects',     href: '/admin/projects',         icon: 'folder'  },
 			{ label: 'Tickets',      href: '/admin/tickets',          icon: 'ticket'  },
+			{ label: 'Roles',        href: '/admin/roles',            icon: 'key'     },
 			{ label: 'Payout Rates', href: '/admin/payouts/rates',    icon: 'dollar'  },
 			{ label: 'Payout Log',   href: '/admin/payouts/log',      icon: 'chart'   }
 		],
@@ -176,6 +177,8 @@
 						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
 					{:else if item.icon === 'cube'}
 						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+					{:else if item.icon === 'key'}
+						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="M21 2l-9.6 9.6"/><path d="M15.5 7.5l3 3L22 7l-3-3"/></svg>
 					{/if}
 					{item.label}
 				</a>

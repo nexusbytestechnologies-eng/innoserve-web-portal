@@ -5,13 +5,13 @@
   import { fetchProjects, type Project } from '$lib/modules/data/projects/queries';
   import { createProject } from '$lib/modules/data/projects/actions';
   import { fetchCustomers, type Customer } from '$lib/modules/data/customers/queries';
-  import { fetchEngineerProfiles, type EngineerProfile } from '$lib/modules/data/engineers/queries';
+  import { fetchUsersByRole, type User } from '$lib/modules/data/tickets/queries';
 
   // ── State ──────────────────────────────────────────────────────────────────
 
   let projects = $state<Project[]>([]);
   let customers = $state<Customer[]>([]);
-  let engineers = $state<EngineerProfile[]>([]);
+  let projectHeads = $state<User[]>([]);
   let loading = $state(true);
 
   // Modal state
@@ -28,18 +28,18 @@
 
   function headName(id: string | null | undefined): string {
     if (!id) return '—';
-    const eng = engineers.find((e) => e.userId === id || e.id === id);
-    return eng?.userName ?? id;
+    const ph = projectHeads.find((u) => u.id === id);
+    return ph?.name ?? id;
   }
 
   // ── Load data ──────────────────────────────────────────────────────────────
 
   onMount(async () => {
     try {
-      [projects, customers, engineers] = await Promise.all([
+      [projects, customers, projectHeads] = await Promise.all([
         fetchProjects(),
         fetchCustomers(),
-        fetchEngineerProfiles(),
+        fetchUsersByRole('project_head'),
       ]);
     } catch (err) {
       toast.error('Failed to load data');
@@ -126,7 +126,7 @@
       <table class="w-full text-sm border-collapse">
         <thead>
           <tr class="border-b border-gray-100">
-            {#each ['PROJECT NAME', 'CUSTOMER', 'PROJECT HEAD', 'CREATED'] as col}
+            {#each ['PROJECT NAME', 'CUSTOMER', 'PROJECT HEAD'] as col}
               <th class="text-left text-[11px] font-semibold text-gray-400 tracking-wide py-3 px-3 whitespace-nowrap">{col}</th>
             {/each}
           </tr>
@@ -134,11 +134,11 @@
         <tbody>
           {#if loading}
             <tr>
-              <td colspan="4" class="py-10 text-center text-[13px] text-gray-400">Loading…</td>
+              <td colspan="3" class="py-10 text-center text-[13px] text-gray-400">Loading…</td>
             </tr>
           {:else if projects.length === 0}
             <tr>
-              <td colspan="4" class="py-10 text-center text-[13px] text-gray-400">No projects yet</td>
+              <td colspan="3" class="py-10 text-center text-[13px] text-gray-400">No projects yet</td>
             </tr>
           {:else}
             {#each projects as p}
@@ -146,9 +146,6 @@
                 <td class="py-3 px-3 text-[13px] font-medium text-[#0B182A]">{p.name}</td>
                 <td class="py-3 px-3 text-[13px] text-[#E87D1F] font-medium">{customerName(p.customerId)}</td>
                 <td class="py-3 px-3 text-[13px] text-gray-600">{headName(p.projectHeadId)}</td>
-                <td class="py-3 px-3 text-[12px] text-gray-400">
-                  {new Date(p.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
-                </td>
               </tr>
             {/each}
           {/if}
@@ -209,7 +206,7 @@
           <select class={fieldClass} bind:value={form.customerId}>
             <option value="">— Select customer —</option>
             {#each customers.filter(c => c.status === 'active') as c}
-              <option value={c.id}>{c.companyName}</option>
+              <option value={c.id}>{c.companyName ?? c.contactPersonName ?? c.id}</option>
             {/each}
           </select>
           {#if errors.customerId}<span class={errorClass}>{errors.customerId}</span>{/if}
@@ -220,8 +217,8 @@
           <span class={labelTextClass}>Project Head</span>
           <select class={fieldClass} bind:value={form.projectHeadId}>
             <option value="">— Assign later —</option>
-            {#each engineers as eng}
-              <option value={eng.userId}>{eng.userName ?? eng.userEmail ?? eng.userId}</option>
+            {#each projectHeads as ph}
+              <option value={ph.id}>{ph.name ?? ph.email ?? ph.id}</option>
             {/each}
           </select>
         </label>
