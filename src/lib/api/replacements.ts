@@ -17,20 +17,12 @@ export interface ReplacementRequest {
   updatedAt?: string;
 }
 
-export interface RequestReplacementInput {
-  deviceType: string;
-  reason: string;
-}
-
 // ── Functions ──────────────────────────────────────────────────────────────
 
-export async function requestReplacement(
-  ticketId: string,
-  input: RequestReplacementInput,
-): Promise<ReplacementRequest> {
+export async function requestReplacement(ticketId: string): Promise<ReplacementRequest> {
   const result = await restRequest<ReplacementRequest>(
     `/api/tickets/${ticketId}/replacement-request`,
-    { method: 'POST', body: JSON.stringify(input) },
+    { method: 'POST' },
   );
   invalidate('tickets');
   return result;
@@ -55,12 +47,12 @@ export async function fetchReplacements(
 
 export async function approveReplacement(
   id: string,
-  poNumber: string,
 ): Promise<ReplacementRequest> {
-  return restRequest<ReplacementRequest>(`/api/replacements/${id}/approve`, {
-    method: 'PATCH',
-    body: JSON.stringify({ poNumber }),
+  const result = await restRequest<ReplacementRequest>(`/api/replacements/${id}/approve`, {
+    method: 'POST',
   });
+  invalidate('tickets');
+  return result;
 }
 
 export async function dispatchReplacement(id: string): Promise<ReplacementRequest> {
@@ -70,7 +62,9 @@ export async function dispatchReplacement(id: string): Promise<ReplacementReques
 }
 
 export async function rejectReplacement(id: string): Promise<ReplacementRequest> {
-  return restRequest<ReplacementRequest>(`/api/replacements/${id}/reject`, {
-    method: 'PATCH',
+  const result = await restRequest<ReplacementRequest>(`/api/replacements/${id}/reject`, {
+    method: 'POST',
   });
+  invalidate('tickets');
+  return result;
 }

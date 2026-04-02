@@ -2,7 +2,9 @@
   import { onMount } from 'svelte';
   import * as Icons from '$lib/icons';
   import { toast } from 'svelte-sonner';
+  import { authStore } from '$lib/stores/auth';
   import { fileUrl } from '$lib/api/upload';
+  import { checkClosureEligibility, type ClosureEligibility } from '$lib/api/ticket-closure';
   import { TICKET_STATUS_LABELS } from '$lib/config/roles';
   import {
     fetchProjectHeadProjects,
@@ -13,8 +15,10 @@
     type ProjectHeadProject,
   } from '$lib/api/project-head';
   import type { Attachment, Ticket, TicketHistory } from '$lib/modules/data/tickets/queries';
+  import { queryVersion } from '$lib/stores/query';
 
   type EngineerOption = { id: string; name: string };
+  const user = $derived($authStore.user);
 
   let loading = $state(true);
   let tickets = $state<Ticket[]>([]);
@@ -34,16 +38,24 @@
   let validationNotes = $state('');
   let validating = $state(false);
   let validatedTicketIds = $state<Record<string, boolean>>({});
+  let closureEligibilityByTicket = $state<Record<string, ClosureEligibility>>({});
+  let loadingClosureEligibility = $state<Record<string, boolean>>({});
+  let lastSeenTicketsVersion = $state<number | null>(null);
+
+  async function loadTickets() {
+    const ticketData = await fetchProjectHeadTickets();
+    tickets = ticketData;
+    await primeClosureEligibility(ticketData);
+  }
 
   onMount(async () => {
     try {
-      const [projectData, ticketData, teamData] = await Promise.all([
+      const [projectData, , teamData] = await Promise.all([
         fetchProjectHeadProjects(),
-        fetchProjectHeadTickets(),
+        loadTickets(),
         fetchProjectHeadTeam(),
       ]);
       projects = projectData;
-      tickets = ticketData;
       engineers = teamData.team.engineersByState.flatMap((group) =>
         group.engineers.map((engineer) => ({ id: engineer.id, name: engineer.name })),
       );
@@ -52,6 +64,19 @@
     } finally {
       loading = false;
     }
+  });
+
+  $effect(() => {
+    const version = $queryVersion.tickets;
+    if (lastSeenTicketsVersion === null) {
+      lastSeenTicketsVersion = version;
+      return;
+    }
+    if (version === lastSeenTicketsVersion) return;
+    lastSeenTicketsVersion = version;
+    void loadTickets().catch((err) => {
+      toast.error(`Failed to refresh tickets: ${(err as Error).message}`);
+    });
   });
 
   const filteredTickets = $derived.by(() => {
@@ -94,7 +119,43 @@
   }
 
   function canValidate(status: string): boolean {
-    return String(status ?? '').toLowerCase() === 'pending_validation';
+    return (
+      String(status ?? '').toLowerCase() === 'pending_validation' &&
+      user?.role === 'project_head'
+    );
+  }
+
+  function closureEligibilityFor(ticketId: string): ClosureEligibility | null {
+    return closureEligibilityByTicket[ticketId] ?? null;
+  }
+
+  function closureBlocked(ticketId: string): boolean {
+    const eligibility = closureEligibilityFor(ticketId);
+    return !!eligibility && !eligibility.eligible;
+  }
+
+  function closureReasons(ticketId: string): string[] {
+    return closureEligibilityFor(ticketId)?.reasons ?? [];
+  }
+
+  async function loadClosureEligibility(ticketId: string): Promise<void> {
+    loadingClosureEligibility[ticketId] = true;
+    try {
+      closureEligibilityByTicket[ticketId] = await checkClosureEligibility(ticketId);
+    } catch (err) {
+      toast.error(`Failed to check closure eligibility: ${(err as Error).message}`);
+    } finally {
+      loadingClosureEligibility[ticketId] = false;
+    }
+  }
+
+  async function primeClosureEligibility(list: Ticket[]): Promise<void> {
+    const ids = list
+      .filter((ticket) => canValidate(ticket.status))
+      .map((ticket) => ticket.id)
+      .filter((id) => !closureEligibilityByTicket[id]);
+
+    await Promise.all(ids.map((id) => loadClosureEligibility(id)));
   }
 
   function attachmentHref(filePath: string): string {
@@ -130,6 +191,7 @@
     try {
       await validateProjectHeadTicket(selectedTicket.id, validationNotes);
       validatedTicketIds[selectedTicket.id] = true;
+      await loadClosureEligibility(selectedTicket.id);
       toast.success('Resolution validated successfully');
       selectedTicket = null;
     } catch (err) {
@@ -221,13 +283,20 @@
                 <td class="py-3 px-3 text-[12px] text-gray-400 whitespace-nowrap">{fmtDate(ticket.createdAt)}</td>
                 <td class="py-3 px-3">
                   {#if canValidate(ticket.status)}
-                    <button
-                      onclick={() => openValidation(ticket)}
-                      disabled={!!validatedTicketIds[ticket.id]}
-                      class="px-3 py-1.5 text-[12px] font-semibold rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed {validatedTicketIds[ticket.id] ? 'bg-green-50 text-green-700' : 'bg-[#0B182A] text-white hover:opacity-90'}"
-                    >
-                      {validatedTicketIds[ticket.id] ? 'Validated' : 'Validate Resolution'}
-                    </button>
+                    <div class="flex flex-col gap-1">
+                      <button
+                        onclick={() => openValidation(ticket)}
+                        disabled={!!validatedTicketIds[ticket.id] || loadingClosureEligibility[ticket.id] || closureBlocked(ticket.id)}
+                        class="px-3 py-1.5 text-[12px] font-semibold rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed {validatedTicketIds[ticket.id] ? 'bg-green-50 text-green-700' : 'bg-[#0B182A] text-white hover:opacity-90'}"
+                      >
+                        {validatedTicketIds[ticket.id] ? 'Validated' : 'Validate Resolution'}
+                      </button>
+                      {#if loadingClosureEligibility[ticket.id]}
+                        <span class="text-[11px] text-gray-400">Checking closure eligibility…</span>
+                      {:else if closureBlocked(ticket.id)}
+                        <span class="max-w-[220px] text-[11px] text-red-600">{closureReasons(ticket.id).join(' • ')}</span>
+                      {/if}
+                    </div>
                   {:else}
                     <span class="text-[12px] text-gray-300">—</span>
                   {/if}

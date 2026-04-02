@@ -81,6 +81,7 @@ export interface TicketValidationRecord {
   ticketId: string;
   validatedBy: string;
   role: string;
+  remarks?: string | null;
   notes?: string | null;
   validatedAt: string;
 }
@@ -381,11 +382,11 @@ export async function fetchTicketResolutionContext(
 
 export async function validateProjectHeadTicket(
   ticketId: string,
-  notes?: string,
+  remarks?: string,
 ): Promise<TicketValidationRecord> {
   const result = await restRequest<TicketValidationRecord>(`/api/tickets/${ticketId}/validate`, {
     method: 'POST',
-    body: JSON.stringify(notes?.trim() ? { notes: notes.trim() } : {}),
+    body: JSON.stringify(remarks?.trim() ? { remarks: remarks.trim() } : {}),
   });
 
   invalidate('tickets');

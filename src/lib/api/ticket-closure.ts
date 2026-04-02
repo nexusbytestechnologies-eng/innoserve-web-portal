@@ -12,6 +12,7 @@ export interface ClosureChecks {
 export interface ClosureEligibility {
   eligible: boolean;
   checks: ClosureChecks;
+  reasons: string[];
 }
 
 interface AttachmentRow {
@@ -44,6 +45,16 @@ function checksFromReasons(reasons: string[] = []): ClosureChecks {
   };
 }
 
+function reasonsFromChecks(checks: ClosureChecks): string[] {
+  const reasons: string[] = [];
+  if (!checks.ir_uploaded) reasons.push('IR report is required');
+  if (!checks.site_image_uploaded) reasons.push('Site image upload is required');
+  if (!checks.noc_validated) reasons.push('NOC validation is required');
+  if (!checks.project_head_validated) reasons.push('Project head validation is required');
+  if (!checks.rca_complete) reasons.push('RCA documentation is required');
+  return reasons;
+}
+
 function normalizeResponse(payload: unknown): ClosureEligibility | null {
   if (!payload || typeof payload !== 'object') return null;
 
@@ -56,22 +67,29 @@ function normalizeResponse(payload: unknown): ClosureEligibility | null {
   if (typeof body.eligible !== 'boolean') return null;
 
   if (body.checks && typeof body.checks === 'object') {
+    const checks: ClosureChecks = {
+      ir_uploaded: Boolean(body.checks.ir_uploaded),
+      site_image_uploaded: Boolean(body.checks.site_image_uploaded),
+      noc_validated: Boolean(body.checks.noc_validated),
+      project_head_validated: Boolean(body.checks.project_head_validated),
+      rca_complete: Boolean((body.checks as Partial<Record<keyof ClosureChecks, unknown>>).rca_complete),
+    };
+
     return {
       eligible: body.eligible,
-      checks: {
-        ir_uploaded: Boolean(body.checks.ir_uploaded),
-        site_image_uploaded: Boolean(body.checks.site_image_uploaded),
-        noc_validated: Boolean(body.checks.noc_validated),
-        project_head_validated: Boolean(body.checks.project_head_validated),
-        rca_complete: Boolean((body.checks as Partial<Record<keyof ClosureChecks, unknown>>).rca_complete),
-      },
+      checks,
+      reasons: Array.isArray(body.reasons)
+        ? body.reasons.filter((value): value is string => typeof value === 'string')
+        : reasonsFromChecks(checks),
     };
   }
 
   if (Array.isArray(body.reasons)) {
+    const reasons = body.reasons.filter((value): value is string => typeof value === 'string');
     return {
       eligible: body.eligible,
-      checks: checksFromReasons(body.reasons.filter((value): value is string => typeof value === 'string')),
+      checks: checksFromReasons(reasons),
+      reasons,
     };
   }
 
@@ -103,6 +121,7 @@ async function fetchClosureEligibilityFallback(ticketId: string): Promise<Closur
   return {
     eligible: Object.values(checks).every(Boolean),
     checks,
+    reasons: reasonsFromChecks(checks),
   };
 }
 
@@ -118,4 +137,8 @@ export async function fetchClosureEligibility(ticketId: string): Promise<Closure
   }
 
   return fetchClosureEligibilityFallback(ticketId);
+}
+
+export async function checkClosureEligibility(ticketId: string): Promise<ClosureEligibility> {
+  return fetchClosureEligibility(ticketId);
 }

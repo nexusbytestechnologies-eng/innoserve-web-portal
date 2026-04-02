@@ -21,6 +21,7 @@
       project_head_validated: false,
       rca_complete: false,
     },
+    reasons: [],
   });
 
   async function loadChecklist() {
@@ -77,6 +78,11 @@
   </div>
 
   {#if !loading && !eligibility.eligible}
-    <p class="text-[12px] text-gray-500">Complete the checklist above to enable closure.</p>
+    <div class="flex flex-col gap-1">
+      <p class="text-[12px] text-gray-500">Complete the checklist above to enable closure.</p>
+      {#if eligibility.reasons.length > 0}
+        <p class="text-[12px] text-red-600">{eligibility.reasons.join(' • ')}</p>
+      {/if}
+    </div>
   {/if}
 </div>

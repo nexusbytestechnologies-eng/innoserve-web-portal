@@ -9,6 +9,7 @@ export interface PayoutRecord {
   engineerId: string;
   engineerName?: string;
   callType: string;
+  payoutAmount: number;
   amount: number;
   currency: string;
   status: 'pending' | 'credited' | 'disputed';
@@ -42,7 +43,24 @@ export async function fetchPayouts(params?: {
   if (params?.from)       qs.set('from',        params.from);
   if (params?.to)         qs.set('to',          params.to);
   const q = qs.toString();
-  return restRequest<PayoutRecord[]>(`/api/payouts${q ? `?${q}` : ''}`);
+  const rows = await restRequest<Array<Partial<PayoutRecord> & { payoutAmount?: number; amount?: number }>>(`/api/payouts${q ? `?${q}` : ''}`);
+  return rows.map((row) => {
+    const payoutAmount = Number(row.payoutAmount ?? row.amount ?? 0);
+    return {
+      id: row.id ?? '',
+      ticketId: row.ticketId ?? '',
+      ticketNumber: row.ticketNumber,
+      engineerId: row.engineerId ?? '',
+      engineerName: row.engineerName,
+      callType: row.callType ?? '',
+      payoutAmount,
+      amount: payoutAmount,
+      currency: row.currency ?? 'INR',
+      status: (row.status as PayoutRecord['status']) ?? 'pending',
+      creditedAt: row.creditedAt,
+      createdAt: row.createdAt ?? '',
+    };
+  });
 }
 
 export async function fetchPayoutRates(): Promise<PayoutRate[]> {

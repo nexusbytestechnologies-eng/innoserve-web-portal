@@ -10,6 +10,7 @@
   import type { Project } from "$lib/modules/data/projects/queries";
   import { createTicket } from "$lib/modules/data/tickets/actions";
   import { ApiError, restRequest } from "$lib/api/rest";
+  import { queryVersion } from "$lib/stores/query";
 
   // ── State ─────────────────────────────────────────────────────────────────
 
@@ -20,6 +21,7 @@
   let loadingCategories = $state(false);
   let showForm = $state(false);
   let submitting = $state(false);
+  let lastSeenTicketsVersion = $state<number | null>(null);
 
   let form = $state({
     projectId: "",
@@ -35,13 +37,16 @@
 
   // ── Load ──────────────────────────────────────────────────────────────────
 
+  async function loadTickets() {
+    tickets = await restRequest<Ticket[]>("/api/tickets");
+  }
+
   onMount(async () => {
     try {
-      const [ticketData, projectData] = await Promise.all([
-        restRequest<Ticket[]>("/api/tickets"),
+      const [, projectData] = await Promise.all([
+        loadTickets(),
         restRequest<Project[]>("/api/projects"),
       ]);
-      tickets = ticketData;
       projects = projectData;
       if (projects.length > 0) {
         form.projectId = projects[0].id;
@@ -51,6 +56,19 @@
     } finally {
       loading = false;
     }
+  });
+
+  $effect(() => {
+    const version = $queryVersion.tickets;
+    if (lastSeenTicketsVersion === null) {
+      lastSeenTicketsVersion = version;
+      return;
+    }
+    if (version === lastSeenTicketsVersion) return;
+    lastSeenTicketsVersion = version;
+    void loadTickets().catch(() => {
+      toast.error("Failed to refresh tickets");
+    });
   });
 
   async function ensureCategories() {

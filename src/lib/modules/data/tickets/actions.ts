@@ -1,5 +1,6 @@
 import { restRequest } from "$lib/api/rest";
 import { invalidate } from "$lib/stores/query";
+import { uploadFile, fileUrl } from "$lib/api/upload";
 import type { Ticket, TicketHistory, Attachment, TicketCategory } from "./queries";
 import {
   assignTicket as assignTicketRequest,
@@ -47,9 +48,40 @@ export interface CreateTicketHistoryInput {
 
 export interface CreateAttachmentInput {
   ticketId: string;
-  type?: string;
-  fileUrl?: string;
+  type: "ir_report" | "site_image";
+  fileUrl: string;
   author?: string;
+}
+
+export interface TicketValidation {
+  id: string;
+  ticketId: string;
+  validatedBy: string;
+  role: string;
+  remarks?: string | null;
+  notes?: string | null;
+  validatedAt?: string;
+}
+
+export interface UploadTicketAttachmentInput {
+  ticketId: string;
+  file: File;
+  type: "ir_report" | "site_image";
+  author?: string;
+}
+
+export interface ReplacementRequest {
+  id: string;
+  ticketId: string;
+  ticketNumber?: string;
+  engineerId: string;
+  engineerName?: string;
+  deviceType: string;
+  reason: string;
+  status: "pending" | "approved" | "dispatched" | "replaced" | "rejected";
+  poNumber?: string;
+  requestedAt: string;
+  updatedAt?: string;
 }
 
 export interface CreateTicketCategoryInput {
@@ -91,10 +123,16 @@ export async function createTicketHistory(input: CreateTicketHistoryInput): Prom
 }
 
 export async function createAttachment(input: CreateAttachmentInput): Promise<Attachment> {
-  return restRequest<Attachment>('/api/attachments', {
+  const result = await restRequest<Attachment>(`/api/tickets/${input.ticketId}/attachments`, {
     method: 'POST',
-    body: JSON.stringify(input),
+    body: JSON.stringify({
+      fileUrl: input.fileUrl,
+      type: input.type,
+      ...(input.author ? { author: input.author } : {}),
+    }),
   });
+  invalidate('tickets');
+  return result;
 }
 
 export async function createTicketCategory(
@@ -119,4 +157,39 @@ export async function escalateTicket(input: EscalateTicketInput): Promise<Ticket
     reason: input.reason ?? `Support requested: ${input.escalationLevel}`,
     engineerId: input.engineerId,
   });
+}
+
+export async function validateTicket(
+  ticketId: string,
+  remarks?: string,
+): Promise<TicketValidation> {
+  const result = await restRequest<TicketValidation>(`/api/tickets/${ticketId}/validate`, {
+    method: "POST",
+    body: JSON.stringify(remarks?.trim() ? { remarks: remarks.trim() } : {}),
+  });
+  invalidate("tickets");
+  return result;
+}
+
+export async function uploadTicketAttachment(
+  input: UploadTicketAttachmentInput,
+): Promise<{ fileUrl: string }> {
+  const uploadedFileId = await uploadFile(input.file);
+  const uploadedFileUrl = fileUrl(uploadedFileId);
+  const created = await createAttachment({
+    ticketId: input.ticketId,
+    fileUrl: uploadedFileUrl,
+    type: input.type,
+    author: input.author,
+  });
+  return { fileUrl: created.fileUrl ?? uploadedFileUrl };
+}
+
+export async function requestReplacement(ticketId: string): Promise<ReplacementRequest> {
+  const result = await restRequest<ReplacementRequest>(
+    `/api/tickets/${ticketId}/replacement-request`,
+    { method: "POST" },
+  );
+  invalidate("tickets");
+  return result;
 }

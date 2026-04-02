@@ -11,6 +11,7 @@
   } from '$lib/api/tickets';
   import { fetchProjects, type Project } from '$lib/modules/data/projects/queries';
   import { TICKET_STATUS_LABELS } from '$lib/config/roles';
+  import { queryVersion } from '$lib/stores/query';
 
   const user = $derived($authStore.user);
 
@@ -38,18 +39,22 @@
   let escalationLevel = $state<'L2' | 'L3' | ''>('');
   let escalationReason = $state('');
   let escalating = $state(false);
+  let lastSeenTicketsVersion = $state<number | null>(null);
 
   // ── Load ──────────────────────────────────────────────────────────────────
 
+  async function loadTickets() {
+    tickets = await fetchTickets();
+  }
+
   onMount(async () => {
     try {
-      const [allTickets, eng, plan, projs] = await Promise.all([
-        fetchTickets(),
+      const [, eng, plan, projs] = await Promise.all([
+        loadTickets(),
         fetchUsersByRole('engineer'),
         fetchUsersByRole('state_planner'),
         fetchProjects().catch(() => [] as Project[]),
       ]);
-      tickets = allTickets;
       engineers = eng;
       planners = plan;
       projects = projs;
@@ -58,6 +63,19 @@
     } finally {
       loading = false;
     }
+  });
+
+  $effect(() => {
+    const version = $queryVersion.tickets;
+    if (lastSeenTicketsVersion === null) {
+      lastSeenTicketsVersion = version;
+      return;
+    }
+    if (version === lastSeenTicketsVersion) return;
+    lastSeenTicketsVersion = version;
+    void loadTickets().catch(() => {
+      toast.error('Failed to refresh tickets');
+    });
   });
 
   // ── Helpers ───────────────────────────────────────────────────────────────

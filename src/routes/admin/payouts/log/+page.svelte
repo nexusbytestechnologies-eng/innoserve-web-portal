@@ -1,7 +1,8 @@
-<script lang="ts">
+  <script lang="ts">
   import { onMount } from 'svelte';
   import { toast } from 'svelte-sonner';
-  import { fetchPayouts, disputePayout, type PayoutRecord } from '$lib/api/payouts';
+  import { fetchPayouts, type PayoutRecord } from '$lib/modules/data/payouts/queries';
+  import { disputePayout } from '$lib/api/payouts';
 
   // ── Filter state ──────────────────────────────────────────────────────────
 
@@ -172,7 +173,7 @@
       <table class="w-full text-sm border-collapse">
         <thead>
           <tr class="border-b border-gray-100">
-            {#each ['TICKET', 'ENGINEER', 'CALL TYPE', 'AMOUNT', 'STATUS', 'CREDITED AT', 'ACTIONS'] as col}
+            {#each ['TICKET ID', 'PAYOUT AMOUNT', 'STATUS', 'ACTIONS'] as col}
               <th class="text-left text-[11px] font-semibold text-gray-400 tracking-wide py-3 px-3 whitespace-nowrap">{col}</th>
             {/each}
           </tr>
@@ -180,7 +181,7 @@
         <tbody>
           {#if loading}
             <tr>
-              <td colspan="7" class="py-12 text-center text-[13px] text-gray-400">
+              <td colspan="4" class="py-12 text-center text-[13px] text-gray-400">
                 <div class="flex items-center justify-center gap-2">
                   <div class="w-4 h-4 border-2 border-gray-200 border-t-[#E87D1F] rounded-full animate-spin"></div>
                   Loading…
@@ -189,7 +190,7 @@
             </tr>
           {:else if payouts.length === 0}
             <tr>
-              <td colspan="7" class="py-16 text-center">
+              <td colspan="4" class="py-16 text-center">
                 <div class="flex flex-col items-center gap-2">
                   <div class="w-12 h-12 rounded-full bg-gray-50 flex items-center justify-center">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
@@ -201,22 +202,15 @@
           {:else}
             {#each payouts as p}
               <tr class="border-b border-gray-50 hover:bg-gray-50/60 transition-colors">
-                <td class="py-3 px-3 text-[13px] font-semibold text-[#E87D1F] whitespace-nowrap">
-                  {p.ticketNumber || p.ticketId.slice(0, 8)}
-                </td>
-                <td class="py-3 px-3 text-[13px] text-gray-600 whitespace-nowrap">
-                  {p.engineerName ?? p.engineerId.slice(0, 8)}
-                </td>
-                <td class="py-3 px-3 text-[13px] text-gray-700">{p.callType}</td>
+                <td class="py-3 px-3 text-[13px] font-semibold text-[#E87D1F] whitespace-nowrap">{p.ticketId}</td>
                 <td class="py-3 px-3 text-[13px] font-semibold text-gray-800 whitespace-nowrap">
-                  {fmtCurrency(p.amount, p.currency)}
+                  {fmtCurrency(p.payoutAmount, p.currency)}
                 </td>
                 <td class="py-3 px-3">
                   <span class="text-[11px] font-semibold px-2.5 py-1 rounded-full {statusBadge(p.status)}">
                     {statusLabel(p.status)}
                   </span>
                 </td>
-                <td class="py-3 px-3 text-[12px] text-gray-400 whitespace-nowrap">{fmtDate(p.creditedAt)}</td>
                 <td class="py-3 px-3">
                   {#if p.status !== 'disputed'}
                     <button

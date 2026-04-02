@@ -28,6 +28,7 @@
   } from '$lib/config/roles';
   import { ApiError } from '$lib/api/rest';
   import type { ClosureEligibility } from '$lib/api/ticket-closure';
+  import { queryVersion } from '$lib/stores/query';
 
   // ── Constants ─────────────────────────────────────────────────────────────
 
@@ -82,6 +83,7 @@
   let saving = $state(false);
   let actionEligibility = $state<ClosureEligibility | null>(null);
   let checklistRefreshKey = $state(0);
+  let lastSeenTicketsVersion = $state<number | null>(null);
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
@@ -264,10 +266,14 @@
 
   // ── Load ──────────────────────────────────────────────────────────────────
 
+  async function loadTickets() {
+    allTickets = await fetchTickets();
+  }
+
   onMount(async () => {
     try {
-      [allTickets, engineers, statePlanners, projects, customers, categories] = await Promise.all([
-        fetchTickets(),
+      [, engineers, statePlanners, projects, customers, categories] = await Promise.all([
+        loadTickets(),
         fetchEngineerProfiles(),
         fetchUsersByRole('state_planner').catch(() => [] as User[]),
         fetchProjects().catch(() => [] as Project[]),
@@ -279,6 +285,19 @@
     } finally {
       loading = false;
     }
+  });
+
+  $effect(() => {
+    const version = $queryVersion.tickets;
+    if (lastSeenTicketsVersion === null) {
+      lastSeenTicketsVersion = version;
+      return;
+    }
+    if (version === lastSeenTicketsVersion) return;
+    lastSeenTicketsVersion = version;
+    void loadTickets().catch(() => {
+      toast.error('Failed to refresh tickets');
+    });
   });
 
   // ── Manage modal ──────────────────────────────────────────────────────────
