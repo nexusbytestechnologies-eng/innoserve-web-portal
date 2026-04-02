@@ -7,8 +7,6 @@ export interface Project {
   customerId: string;
   projectHeadId?: string | null;
   name: string;
-  author: string;
-  createdAt: string;
 }
 
 // ── Queries ────────────────────────────────────────────────────────────────
@@ -16,7 +14,7 @@ export interface Project {
 const FETCH_PROJECTS = `
   query {
     projects {
-      id customerId projectHeadId name author createdAt
+      id customerId projectHeadId name
     }
   }
 `;

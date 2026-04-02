@@ -34,6 +34,21 @@ export interface UserRole {
   createdAt: string;
 }
 
+// ── Queries ────────────────────────────────────────────────────────────────
+
+const FETCH_ROLES = `
+  query {
+    roles {
+      id name author createdAt
+    }
+  }
+`;
+
+export async function fetchRoles(): Promise<Role[]> {
+  const data = await gqlRequest<{ roles: Role[] }>(FETCH_ROLES);
+  return data.roles;
+}
+
 // ── Mutations ──────────────────────────────────────────────────────────────
 
 const CREATE_ROLE = `
