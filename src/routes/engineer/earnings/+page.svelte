@@ -3,6 +3,7 @@
   import { toast } from 'svelte-sonner';
   import { authStore } from '$lib/stores/auth';
   import { fetchPayouts, type PayoutRecord } from '$lib/modules/data/payouts/queries';
+  import Pagination from '$lib/components/Pagination.svelte';
 
   // ── State ─────────────────────────────────────────────────────────────────
 
@@ -39,6 +40,12 @@
   });
   const pending       = $derived(payouts.filter(p => p.status === 'pending').reduce((s, p) => s + p.payoutAmount, 0));
   const paidOut       = $derived(payouts.filter(p => p.status === 'credited').reduce((s, p) => s + p.payoutAmount, 0));
+
+  // ── Pagination ────────────────────────────────────────────────────────────
+  const PAGE_SIZE = 15;
+  let currentPage = $state(1);
+  const totalPages   = $derived(Math.max(1, Math.ceil(payouts.length / PAGE_SIZE)));
+  const pagedPayouts = $derived(payouts.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE));
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -124,7 +131,7 @@
               </td>
             </tr>
           {:else}
-            {#each payouts as p}
+            {#each pagedPayouts as p}
               <tr class="border-b border-gray-50 hover:bg-gray-50/60 transition-colors">
                 <td class="py-3 px-3 text-[13px] font-semibold text-[#E87D1F] whitespace-nowrap">{p.ticketId}</td>
                 <td class="py-3 px-3 text-[13px] font-semibold text-gray-800 whitespace-nowrap">
@@ -141,5 +148,14 @@
         </tbody>
       </table>
     </div>
+    <Pagination
+      currentPage={currentPage}
+      totalPages={totalPages}
+      totalItems={payouts.length}
+      pageSize={PAGE_SIZE}
+      itemLabel="payouts"
+      loading={loading}
+      onchange={(p) => (currentPage = p)}
+    />
   </div>
 </div>

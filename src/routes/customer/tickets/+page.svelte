@@ -11,6 +11,7 @@
   import { createTicket } from "$lib/modules/data/tickets/actions";
   import { ApiError, restRequest } from "$lib/api/rest";
   import { queryVersion } from "$lib/stores/query";
+  import Pagination from "$lib/components/Pagination.svelte";
 
   // ── State ─────────────────────────────────────────────────────────────────
 
@@ -105,6 +106,12 @@
     if (!id) return "—";
     return projects.find((p) => p.id === id)?.name ?? "—";
   }
+
+  // ── Pagination ────────────────────────────────────────────────────────────
+  const PAGE_SIZE = 15;
+  let currentPage = $state(1);
+  const totalPages   = $derived(Math.max(1, Math.ceil(tickets.length / PAGE_SIZE)));
+  const pagedTickets = $derived(tickets.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE));
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -306,7 +313,7 @@
               </td>
             </tr>
           {:else}
-            {#each tickets as t}
+            {#each pagedTickets as t}
               <tr
                 class="border-b border-gray-50 hover:bg-gray-50/60 transition-colors"
               >
@@ -376,6 +383,15 @@
         </tbody>
       </table>
     </div>
+    <Pagination
+      currentPage={currentPage}
+      totalPages={totalPages}
+      totalItems={tickets.length}
+      pageSize={PAGE_SIZE}
+      itemLabel="tickets"
+      loading={loading}
+      onchange={(p) => (currentPage = p)}
+    />
   </div>
 </div>
 

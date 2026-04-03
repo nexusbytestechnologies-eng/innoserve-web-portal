@@ -8,6 +8,7 @@
   } from '$lib/api/replacements';
   import { approveReplacement, rejectReplacement } from '$lib/modules/data/replacements/actions';
   import { queryVersion } from '$lib/stores/query';
+  import Pagination from '$lib/components/Pagination.svelte';
 
   // ── State ─────────────────────────────────────────────────────────────────
 
@@ -48,6 +49,13 @@
       toast.error('Failed to refresh replacements');
     });
   });
+
+  // ── Pagination ────────────────────────────────────────────────────────────
+  const PAGE_SIZE = 15;
+  let currentPage = $state(1);
+  $effect(() => { filterStatus; currentPage = 1; });
+  const totalPages        = $derived(Math.max(1, Math.ceil(replacements.length / PAGE_SIZE)));
+  const pagedReplacements = $derived(replacements.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE));
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -191,7 +199,7 @@
               </td>
             </tr>
           {:else}
-            {#each replacements as r}
+            {#each pagedReplacements as r}
               <tr class="border-b border-gray-50 hover:bg-gray-50/60 transition-colors">
                 <td class="py-3 px-3 text-[13px] font-semibold text-[#E87D1F] whitespace-nowrap">
                   {r.ticketNumber || r.ticketId.slice(0, 8)}
@@ -256,5 +264,14 @@
         </tbody>
       </table>
     </div>
+    <Pagination
+      currentPage={currentPage}
+      totalPages={totalPages}
+      totalItems={replacements.length}
+      pageSize={PAGE_SIZE}
+      itemLabel="replacements"
+      loading={loading}
+      onchange={(p) => (currentPage = p)}
+    />
   </div>
 </div>

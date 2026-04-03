@@ -4,6 +4,7 @@
   import { TICKET_STATUS_LABELS } from '$lib/config/roles';
   import { fetchProjectHeadSlaData, type ProjectHeadSlaData, type ProjectHeadProject } from '$lib/api/project-head';
   import type { Ticket } from '$lib/modules/data/tickets/queries';
+  import Pagination from '$lib/components/Pagination.svelte';
 
   let loading = $state(true);
   let projects = $state<ProjectHeadProject[]>([]);
@@ -39,9 +40,17 @@
     });
   }
 
-  function renderRows(rows: Ticket[]) {
-    return rows.slice(0, 8);
-  }
+  const PAGE_SIZE = 10;
+  let atRiskPage   = $state(1);
+  let breachedPage = $state(1);
+
+  const atRiskTotal    = $derived(sla.atRiskTickets.length);
+  const atRiskPages    = $derived(Math.max(1, Math.ceil(atRiskTotal / PAGE_SIZE)));
+  const pagedAtRisk    = $derived(sla.atRiskTickets.slice((atRiskPage - 1) * PAGE_SIZE, atRiskPage * PAGE_SIZE));
+
+  const breachedTotal  = $derived(sla.breachedTickets.length);
+  const breachedPages  = $derived(Math.max(1, Math.ceil(breachedTotal / PAGE_SIZE)));
+  const pagedBreached  = $derived(sla.breachedTickets.slice((breachedPage - 1) * PAGE_SIZE, breachedPage * PAGE_SIZE));
 </script>
 
 <svelte:head><title>Project SLA · Innoserve Techsol</title></svelte:head>
@@ -89,7 +98,7 @@
             {:else if sla.atRiskTickets.length === 0}
               <tr><td colspan="4" class="py-10 text-center text-[13px] text-gray-400">No tickets at risk right now</td></tr>
             {:else}
-              {#each renderRows(sla.atRiskTickets) as ticket}
+              {#each pagedAtRisk as ticket}
                 <tr class="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                   <td class="py-3 px-3 text-[13px] font-semibold text-[#E87D1F]">{ticket.ticketNumber || ticket.id.slice(0, 8)}</td>
                   <td class="py-3 px-3 text-[13px] text-gray-600">{projectName(ticket.projectId)}</td>
@@ -101,6 +110,15 @@
           </tbody>
         </table>
       </div>
+      <Pagination
+        currentPage={atRiskPage}
+        totalPages={atRiskPages}
+        totalItems={atRiskTotal}
+        pageSize={PAGE_SIZE}
+        itemLabel="tickets"
+        loading={loading}
+        onchange={(p) => (atRiskPage = p)}
+      />
     </div>
 
     <div class="bg-white rounded-2xl p-6 shadow">
@@ -124,7 +142,7 @@
             {:else if sla.breachedTickets.length === 0}
               <tr><td colspan="4" class="py-10 text-center text-[13px] text-gray-400">No breached tickets right now</td></tr>
             {:else}
-              {#each renderRows(sla.breachedTickets) as ticket}
+              {#each pagedBreached as ticket}
                 <tr class="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                   <td class="py-3 px-3 text-[13px] font-semibold text-[#E87D1F]">{ticket.ticketNumber || ticket.id.slice(0, 8)}</td>
                   <td class="py-3 px-3 text-[13px] text-gray-600">{projectName(ticket.projectId)}</td>
@@ -136,6 +154,15 @@
           </tbody>
         </table>
       </div>
+      <Pagination
+        currentPage={breachedPage}
+        totalPages={breachedPages}
+        totalItems={breachedTotal}
+        pageSize={PAGE_SIZE}
+        itemLabel="tickets"
+        loading={loading}
+        onchange={(p) => (breachedPage = p)}
+      />
     </div>
   </div>
 </div>

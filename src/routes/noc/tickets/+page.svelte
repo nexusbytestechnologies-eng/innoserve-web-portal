@@ -17,6 +17,7 @@
   import { fetchProjects, type Project } from '$lib/modules/data/projects/queries';
   import { ApiError, restRequest } from '$lib/api/rest';
   import { queryVersion } from '$lib/stores/query';
+  import Pagination from '$lib/components/Pagination.svelte';
 
   const user = $derived($authStore.user);
 
@@ -470,6 +471,19 @@
   const labelClass     = 'flex flex-col gap-1.5';
   const labelTextClass = 'text-[11px] font-semibold text-gray-500 uppercase tracking-wide';
   const errorClass     = 'text-[11px] text-red-500 mt-0.5';
+
+  // ── Pagination ─────────────────────────────────────────────────────────────
+  const PAGE_SIZE = 15;
+  let currentPageAll        = $state(1);
+  let currentPageUnassigned = $state(1);
+
+  $effect(() => { activeTab; currentPageAll = 1; currentPageUnassigned = 1; });
+
+  const pagedTickets    = $derived(tickets.slice((currentPageAll - 1) * PAGE_SIZE, currentPageAll * PAGE_SIZE));
+  const totalPagesAll   = $derived(Math.max(1, Math.ceil(tickets.length / PAGE_SIZE)));
+
+  const pagedUnassigned       = $derived(unassigned.slice((currentPageUnassigned - 1) * PAGE_SIZE, currentPageUnassigned * PAGE_SIZE));
+  const totalPagesUnassigned  = $derived(Math.max(1, Math.ceil(unassigned.length / PAGE_SIZE)));
 </script>
 
 <svelte:head><title>Tickets · NOC · Innoserve Techsol</title></svelte:head>
@@ -569,7 +583,7 @@
                   </td>
                 </tr>
               {:else}
-                {#each tickets as t}
+                {#each pagedTickets as t}
                   <tr class="border-b border-gray-50 hover:bg-gray-50/60 transition-colors
                              {normalizeStatus(t.status) === 'pending_validation' ? 'bg-purple-50/30' : ''}
                              {normalizeStatus(t.status) === 'open' ? 'bg-orange-50/20' : ''}">
@@ -633,6 +647,15 @@
             </tbody>
           </table>
         </div>
+        <Pagination
+          currentPage={currentPageAll}
+          totalPages={totalPagesAll}
+          totalItems={tickets.length}
+          pageSize={PAGE_SIZE}
+          itemLabel="tickets"
+          loading={loading}
+          onchange={(p) => (currentPageAll = p)}
+        />
 
       <!-- ── Unassigned Tab ──────────────────────────────────────────────── -->
       {:else}
@@ -667,7 +690,7 @@
                   </td>
                 </tr>
               {:else}
-                {#each unassigned as t}
+                {#each pagedUnassigned as t}
                   {@const tAny = t as any}
                   <tr class="border-b border-orange-50 hover:bg-orange-50/40 transition-colors bg-orange-50/20">
                     <td class="py-3 px-3">
@@ -710,6 +733,15 @@
             </tbody>
           </table>
         </div>
+        <Pagination
+          currentPage={currentPageUnassigned}
+          totalPages={totalPagesUnassigned}
+          totalItems={unassigned.length}
+          pageSize={PAGE_SIZE}
+          itemLabel="tickets"
+          loading={loadingUnassigned}
+          onchange={(p) => (currentPageUnassigned = p)}
+        />
       {/if}
 
     </div>

@@ -16,6 +16,7 @@
   } from '$lib/api/project-head';
   import type { Attachment, Ticket, TicketHistory } from '$lib/modules/data/tickets/queries';
   import { queryVersion } from '$lib/stores/query';
+  import Pagination from '$lib/components/Pagination.svelte';
 
   type EngineerOption = { id: string; name: string };
   const user = $derived($authStore.user);
@@ -92,6 +93,13 @@
       return true;
     });
   });
+
+  // ── Pagination ────────────────────────────────────────────────────────────
+  const PAGE_SIZE = 15;
+  let currentPage = $state(1);
+  $effect(() => { statusFilter; engineerFilter; currentPage = 1; });
+  const totalPages   = $derived(Math.max(1, Math.ceil(filteredTickets.length / PAGE_SIZE)));
+  const pagedTickets = $derived(filteredTickets.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE));
 
   function projectName(id: string): string {
     return projects.find((project) => project.id === id)?.name ?? '—';
@@ -261,7 +269,7 @@
           {:else if filteredTickets.length === 0}
             <tr><td colspan="8" class="py-10 text-center text-[13px] text-gray-400">No tickets match the selected filters</td></tr>
           {:else}
-            {#each filteredTickets as ticket}
+            {#each pagedTickets as ticket}
               <tr class="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                 <td class="py-3 px-3 text-[13px] font-semibold text-[#E87D1F] whitespace-nowrap">
                   {ticket.ticketNumber || ticket.id.slice(0, 8)}
@@ -307,6 +315,15 @@
         </tbody>
       </table>
     </div>
+    <Pagination
+      currentPage={currentPage}
+      totalPages={totalPages}
+      totalItems={filteredTickets.length}
+      pageSize={PAGE_SIZE}
+      itemLabel="tickets"
+      loading={loading}
+      onchange={(p) => (currentPage = p)}
+    />
   </div>
 </div>
 

@@ -19,6 +19,7 @@
   import { fetchProjects, type Project } from '$lib/modules/data/projects/queries';
   import ClosureChecklist from '$lib/modules/data/tickets/ClosureChecklist.svelte';
   import { queryVersion } from '$lib/stores/query';
+  import Pagination from '$lib/components/Pagination.svelte';
 
   const user = $derived($authStore.user);
 
@@ -115,6 +116,12 @@
     if (!id) return '—';
     return projects.find((p) => p.id === id)?.name ?? '—';
   }
+
+  // ── Pagination ────────────────────────────────────────────────────────────
+  const PAGE_SIZE = 15;
+  let currentPage = $state(1);
+  const totalPages   = $derived(Math.max(1, Math.ceil(tickets.length / PAGE_SIZE)));
+  const pagedTickets = $derived(tickets.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE));
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -411,7 +418,7 @@
               </td>
             </tr>
           {:else}
-            {#each tickets as t}
+            {#each pagedTickets as t}
               <tr class="border-b border-gray-50 hover:bg-gray-50/60 transition-colors
                          {normalizeStatus(t.status) === 'pending_validation' ? 'bg-purple-50/20' : ''}">
                 <td class="py-3 px-3 text-[13px] font-semibold text-[#E87D1F] whitespace-nowrap">
@@ -468,6 +475,15 @@
         </tbody>
       </table>
     </div>
+    <Pagination
+      currentPage={currentPage}
+      totalPages={totalPages}
+      totalItems={tickets.length}
+      pageSize={PAGE_SIZE}
+      itemLabel="tickets"
+      loading={loading}
+      onchange={(p) => (currentPage = p)}
+    />
   </div>
 </div>
 

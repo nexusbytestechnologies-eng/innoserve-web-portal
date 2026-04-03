@@ -6,6 +6,7 @@
   import { TICKET_STATUS_LABELS } from '$lib/config/roles';
   import { fetchProjectHeadDashboardData, type ProjectHeadSummary } from '$lib/api/project-head';
   import type { Ticket } from '$lib/modules/data/tickets/queries';
+  import Pagination from '$lib/components/Pagination.svelte';
 
   const user = $derived($authStore.user);
 
@@ -23,7 +24,7 @@
     try {
       const data = await fetchProjectHeadDashboardData();
       summary = data.summary;
-      atRiskTickets = data.atRiskTickets.slice(0, 6);
+      atRiskTickets = data.atRiskTickets;
       projectNames = data.projects.map((project) => project.name);
     } catch (err) {
       toast.error(`Failed to load dashboard: ${(err as Error).message}`);
@@ -31,6 +32,11 @@
       loading = false;
     }
   });
+
+  const PAGE_SIZE = 10;
+  let currentPage = $state(1);
+  const totalPages     = $derived(Math.max(1, Math.ceil(atRiskTickets.length / PAGE_SIZE)));
+  const pagedAtRisk    = $derived(atRiskTickets.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE));
 
   function fmtDate(value: string): string {
     if (!value) return '—';
@@ -122,7 +128,7 @@
           {:else if atRiskTickets.length === 0}
             <tr><td colspan="5" class="py-10 text-center text-[13px] text-gray-400">No tickets are at risk right now</td></tr>
           {:else}
-            {#each atRiskTickets as ticket}
+            {#each pagedAtRisk as ticket}
               <tr class="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                 <td class="py-3 px-3 text-[13px] font-semibold text-[#E87D1F] whitespace-nowrap">
                   {ticket.ticketNumber || ticket.id.slice(0, 8)}
@@ -141,5 +147,14 @@
         </tbody>
       </table>
     </div>
+    <Pagination
+      currentPage={currentPage}
+      totalPages={totalPages}
+      totalItems={atRiskTickets.length}
+      pageSize={PAGE_SIZE}
+      itemLabel="tickets"
+      loading={loading}
+      onchange={(p) => (currentPage = p)}
+    />
   </div>
 </div>

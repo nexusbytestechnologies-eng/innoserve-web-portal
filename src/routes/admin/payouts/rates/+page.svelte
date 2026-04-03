@@ -7,6 +7,7 @@
     fetchTicketCategories,
     type TicketCategory,
   } from '$lib/modules/data/tickets/queries';
+  import Pagination from '$lib/components/Pagination.svelte';
 
   type PayoutRateRow = PayoutRate & { configured: boolean };
 
@@ -162,6 +163,12 @@
     }
   }
 
+  // ── Pagination ────────────────────────────────────────────────────────────
+  const PAGE_SIZE = 15;
+  let currentPage = $state(1);
+  const totalPages  = $derived(Math.max(1, Math.ceil(rates.length / PAGE_SIZE)));
+  const pagedRates  = $derived(rates.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE));
+
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   function fmtDate(d?: string) {
@@ -308,7 +315,7 @@
               </td>
             </tr>
           {:else}
-            {#each rates as r}
+            {#each pagedRates as r}
               {@const isEditing = r.categoryId in editing}
               {@const isSaving  = saving[r.categoryId]}
               <tr class="border-b border-gray-50 hover:bg-gray-50/60 transition-colors">
@@ -377,5 +384,14 @@
         </tbody>
       </table>
     </div>
+    <Pagination
+      currentPage={currentPage}
+      totalPages={totalPages}
+      totalItems={rates.length}
+      pageSize={PAGE_SIZE}
+      itemLabel="rates"
+      loading={loading}
+      onchange={(p) => (currentPage = p)}
+    />
   </div>
 </div>

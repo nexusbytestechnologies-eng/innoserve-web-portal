@@ -16,6 +16,7 @@
     fetchUsersByRole,
     type User,
   } from "$lib/modules/data/tickets/queries";
+  import Pagination from "$lib/components/Pagination.svelte";
 
   // ── State ──────────────────────────────────────────────────────────────────
 
@@ -119,24 +120,6 @@
     filteredProjects().slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
   );
 
-  const pageNumbers = $derived((): (number | "...")[] => {
-    if (totalPages <= 1) return [];
-    const pages = new Set<number>();
-    pages.add(1);
-    pages.add(totalPages);
-    for (let i = currentPage - 1; i <= currentPage + 1; i++) {
-      if (i >= 1 && i <= totalPages) pages.add(i);
-    }
-    const sorted = [...pages].sort((a, b) => a - b);
-    const result: (number | "...")[] = [];
-    let prev = 0;
-    for (const p of sorted) {
-      if (p - prev > 1) result.push("...");
-      result.push(p);
-      prev = p;
-    }
-    return result;
-  });
 
   // ── Create project ─────────────────────────────────────────────────────────
 
@@ -348,39 +331,15 @@
       </table>
     </div>
 
-    <!-- Pagination -->
-    {#if pageNumbers().length > 0}
-      <div class="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
-        <span class="text-[12px] text-gray-400">
-          Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, totalFiltered)} of {totalFiltered}
-        </span>
-        <div class="flex items-center gap-1">
-          <button
-            onclick={() => { if (currentPage > 1) currentPage--; }}
-            disabled={currentPage === 1}
-            class="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:border-[#0B182A] hover:text-[#0B182A] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer text-[12px]"
-          >‹</button>
-          {#each pageNumbers() as pg}
-            {#if pg === "..."}
-              <span class="w-8 h-8 flex items-center justify-center text-[12px] text-gray-400">…</span>
-            {:else}
-              <button
-                onclick={() => { currentPage = pg; }}
-                class="w-8 h-8 flex items-center justify-center rounded-lg border text-[12px] transition-colors cursor-pointer
-                  {currentPage === pg
-                    ? 'border-[#0B182A] bg-[#0B182A] text-white'
-                    : 'border-gray-200 text-gray-600 hover:border-[#0B182A] hover:text-[#0B182A]'}"
-              >{pg}</button>
-            {/if}
-          {/each}
-          <button
-            onclick={() => { if (currentPage < totalPages) currentPage++; }}
-            disabled={currentPage === totalPages}
-            class="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:border-[#0B182A] hover:text-[#0B182A] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer text-[12px]"
-          >›</button>
-        </div>
-      </div>
-    {/if}
+    <Pagination
+      currentPage={currentPage}
+      totalPages={totalPages}
+      totalItems={totalFiltered}
+      pageSize={PAGE_SIZE}
+      itemLabel="projects"
+      loading={loading}
+      onchange={(p) => (currentPage = p)}
+    />
   </div>
 </div>
 
