@@ -6,7 +6,6 @@
   import { fetchTickets, type Ticket } from '$lib/modules/data/tickets/queries';
   import {
     createTicketHistory,
-    requestReplacement,
     uploadTicketAttachment,
   } from '$lib/modules/data/tickets/actions';
   import { escalateTicket, updateTicketStatus } from '$lib/api/tickets';
@@ -18,7 +17,7 @@
   import { ApiError } from '$lib/api/rest';
   import { fetchProjects, type Project } from '$lib/modules/data/projects/queries';
   import ClosureChecklist from '$lib/modules/data/tickets/ClosureChecklist.svelte';
-  import { queryVersion } from '$lib/stores/query';
+  import { queryVersion, invalidate } from '$lib/stores/query';
   import Pagination from '$lib/components/Pagination.svelte';
 
   const user = $derived($authStore.user);
@@ -58,9 +57,6 @@
   let escalationLevel = $state<'L2' | 'L3' | ''>('');
   let escalationReason = $state('');
   let escalating = $state(false);
-
-  let replacingTicket = $state(false);
-  let replacingTicketId = $state<string | null>(null);
 
   // Replacement status tracker
   let trackerTicket = $state<Ticket | null>(null);
@@ -159,11 +155,6 @@
     return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   }
 
-  // Can the engineer still act on this ticket?
-  function canAct(ticket: Ticket): boolean {
-    return !['closed'].includes(normalizeStatus(ticket.status));
-  }
-
   // ── Status update ─────────────────────────────────────────────────────────
 
   function openStatus(ticket: Ticket) {
@@ -205,7 +196,86 @@
 
   // ── Send for Validation ───────────────────────────────────────────────────
 
-  let sendingValidation = $state<string | null>(null); // ticket id being sent
+  let sendingValidation = $state<string | null>(null);
+  let startingWork = $state<string | null>(null);
+  let markingResolved = $state<string | null>(null);
+  let openDropdownId = $state<string | null>(null);
+  let dropdownPos = $state({ top: 0, right: 0 });
+  let dropdownActions = $state<TicketAction[]>([]);
+
+  // ── Actions (centralised per-status rules) ────────────────────────────────
+
+  type TicketAction = { label: string; onClick: () => void; disabled?: boolean };
+
+  function getTicketActions(t: Ticket): TicketAction[] {
+    const ns = normalizeStatus(t.status);
+
+    if (ns === 'assigned') {
+      const actions: TicketAction[] = [];
+      if (t.assignedEngineerId === user?.id) {
+        actions.push({ label: 'Start Work', onClick: () => startWork(t), disabled: startingWork === t.id });
+      }
+      actions.push({ label: 'Escalate', onClick: () => openEscalate(t) });
+      return actions;
+    }
+
+    if (ns === 'in_progress') {
+      return [
+        { label: 'Mark Resolved', onClick: () => markResolved(t), disabled: markingResolved === t.id },
+        { label: 'Upload Proof',  onClick: () => openUpload(t) },
+        { label: 'Escalate',      onClick: () => openEscalate(t) },
+      ];
+    }
+
+    if (ns === 'resolved') {
+      return [
+        { label: 'Send for Validation', onClick: () => sendForValidation(t), disabled: sendingValidation === t.id },
+        { label: 'Upload Proof',        onClick: () => openUpload(t) },
+      ];
+    }
+
+    return []; // pending_validation, closed — no actions
+  }
+
+  async function startWork(ticket: Ticket) {
+    startingWork = ticket.id;
+    try {
+      await createTicketHistory({
+        ticketId: ticket.id,
+        status: 'in_progress',
+        remarks: 'Work started',
+        author: user?.id ?? 'engineer',
+      });
+      const updated = await updateTicketStatus(ticket.id, 'in_progress');
+      tickets = tickets.map((t) => (t.id === updated.id ? { ...t, ...updated } : t));
+      toast.success('Work started');
+      invalidate('tickets');
+    } catch (err) {
+      toast.error(`Failed: ${(err as Error).message}`);
+    } finally {
+      startingWork = null;
+    }
+  }
+
+  async function markResolved(ticket: Ticket) {
+    markingResolved = ticket.id;
+    try {
+      await createTicketHistory({
+        ticketId: ticket.id,
+        status: 'resolved',
+        remarks: 'Ticket resolved',
+        author: user?.id ?? 'engineer',
+      });
+      const updated = await updateTicketStatus(ticket.id, 'resolved');
+      tickets = tickets.map((t) => (t.id === updated.id ? { ...t, ...updated } : t));
+      toast.success('Ticket marked as resolved');
+      invalidate('tickets');
+    } catch (err) {
+      toast.error(`Failed: ${(err as Error).message}`);
+    } finally {
+      markingResolved = null;
+    }
+  }
 
   async function sendForValidation(ticket: Ticket) {
     sendingValidation = ticket.id;
@@ -223,6 +293,7 @@
       );
       tickets = tickets.map((t) => (t.id === updated.id ? { ...t, ...updated } : t));
       toast.success('Ticket submitted for validation');
+      invalidate('tickets');
     } catch (err) {
       toast.error(`Failed: ${(err as Error).message}`);
     } finally {
@@ -332,23 +403,6 @@
 
   // ── Device Replacement ────────────────────────────────────────────────────
 
-  async function requestTicketReplacement(ticket: Ticket) {
-    replacingTicket = true;
-    replacingTicketId = ticket.id;
-    try {
-      await requestReplacement(ticket.id);
-      tickets = tickets.map((t) =>
-        t.id === ticket.id ? { ...t, status: 'pending_replacement' } : t,
-      );
-      toast.success('Replacement request submitted successfully');
-    } catch (err) {
-      toast.error(`Failed: ${(err as Error).message}`);
-    } finally {
-      replacingTicket = false;
-      replacingTicketId = null;
-    }
-  }
-
   async function openTracker(ticket: Ticket) {
     trackerTicket = ticket;
     trackerData = null;
@@ -362,6 +416,10 @@
 </script>
 
 <svelte:head><title>My Tickets · Engineer · Innoserve Techsol</title></svelte:head>
+
+{#if openDropdownId}
+  <div class="fixed inset-0 z-20" role="presentation" onclick={() => (openDropdownId = null)}></div>
+{/if}
 
 <div class="flex flex-col gap-5">
 
@@ -452,21 +510,23 @@
                 </td>
                 <td class="py-3 px-3 text-[12px] text-gray-400 whitespace-nowrap">{fmtDate(t.createdAt)}</td>
                 <td class="py-3 px-3">
-                  {#if canAct(t)}
-                    <div class="flex gap-1.5 flex-wrap">
-                      {#if normalizeStatus(t.status) === 'in_progress'}
-                        <button
-                          onclick={() => requestTicketReplacement(t)}
-                          disabled={replacingTicketId === t.id}
-                          class="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg bg-fuchsia-50 text-fuchsia-700 hover:bg-fuchsia-100 transition-colors cursor-pointer whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed"
-                        >
-                          <Icons.Cube size={12} />
-                          {replacingTicketId === t.id ? 'Requesting…' : 'Replace'}
-                        </button>
-                      {/if}
-                    </div>
+                  {#if getTicketActions(t).length > 0}
+                    <button
+                      onclick={(e) => {
+                        e.stopPropagation();
+                        if (openDropdownId === t.id) { openDropdownId = null; return; }
+                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                        dropdownPos = { top: rect.bottom + 4, right: window.innerWidth - rect.right };
+                        dropdownActions = getTicketActions(t);
+                        openDropdownId = t.id;
+                      }}
+                      class="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors cursor-pointer whitespace-nowrap"
+                    >
+                      Actions
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                    </button>
                   {:else}
-                    <span class="text-[12px] text-gray-400">{t.status}</span>
+                    <span class="text-[12px] text-gray-300">—</span>
                   {/if}
                 </td>
               </tr>
@@ -486,6 +546,24 @@
     />
   </div>
 </div>
+
+<!-- ── Actions Dropdown (fixed to escape overflow-x-auto clipping) ─────── -->
+{#if openDropdownId}
+  <div
+    class="fixed z-50 w-48 rounded-xl bg-white shadow-lg border border-gray-100 py-1 overflow-hidden"
+    style="top: {dropdownPos.top}px; right: {dropdownPos.right}px;"
+  >
+    {#each dropdownActions as action}
+      <button
+        onclick={() => { action.onClick(); openDropdownId = null; }}
+        disabled={action.disabled}
+        class="w-full text-left px-4 py-2.5 text-[12px] text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+      >
+        {action.label}
+      </button>
+    {/each}
+  </div>
+{/if}
 
 <!-- ── Update Status Modal ───────────────────────────────────────────────── -->
 {#if statusTicket}
