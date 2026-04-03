@@ -4,6 +4,7 @@
   import { fetchEngineerProfiles, type EngineerProfile } from '$lib/modules/data/engineers/queries';
   import { fetchRoles, createUserRole, type Role as RoleRecord } from '$lib/api/roles';
   import { ROLE_LABELS, type Role as RoleName } from '$lib/config/roles';
+  import Pagination from '$lib/components/Pagination.svelte';
 
   // ── State ──────────────────────────────────────────────────────────────────
 
@@ -36,6 +37,13 @@
       );
     }),
   );
+
+  // ── Pagination ────────────────────────────────────────────────────────────
+  const PAGE_SIZE = 15;
+  let currentPage = $state(1);
+  $effect(() => { search; currentPage = 1; });
+  const totalPages        = $derived(Math.max(1, Math.ceil(filteredEngineers.length / PAGE_SIZE)));
+  const pagedEngineers    = $derived(filteredEngineers.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE));
 
   onMount(async () => {
     try {
@@ -128,7 +136,7 @@
           {:else if filteredEngineers.length === 0}
             <tr><td colspan="6" class="py-10 text-center text-[13px] text-gray-400">No engineers found</td></tr>
           {:else}
-            {#each filteredEngineers as eng}
+            {#each pagedEngineers as eng}
               <tr class="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                 <td class="py-3 px-3">
                   <p class="text-[13px] font-semibold text-[#0B182A]">{eng.userName ?? '—'}</p>
@@ -161,6 +169,15 @@
         </tbody>
       </table>
     </div>
+    <Pagination
+      currentPage={currentPage}
+      totalPages={totalPages}
+      totalItems={filteredEngineers.length}
+      pageSize={PAGE_SIZE}
+      itemLabel="engineers"
+      loading={loading}
+      onchange={(p) => (currentPage = p)}
+    />
   </div>
 </div>
 

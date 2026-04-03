@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { toast } from 'svelte-sonner';
   import { fetchProjectHeadCustomers, type ProjectHeadCustomerRow } from '$lib/api/project-head';
+  import Pagination from '$lib/components/Pagination.svelte';
 
   let loading = $state(true);
   let customers = $state<ProjectHeadCustomerRow[]>([]);
@@ -16,6 +17,11 @@
       loading = false;
     }
   });
+
+  const PAGE_SIZE = 15;
+  let currentPage = $state(1);
+  const totalPages      = $derived(Math.max(1, Math.ceil(customers.length / PAGE_SIZE)));
+  const pagedCustomers  = $derived(customers.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE));
 
   function statusBadge(status: string): string {
     const value = String(status ?? '').toLowerCase();
@@ -48,7 +54,7 @@
         {:else if customers.length === 0}
           <tr><td colspan="5" class="py-10 text-center text-[13px] text-gray-400">No customers are linked to your projects yet</td></tr>
         {:else}
-          {#each customers as customer}
+          {#each pagedCustomers as customer}
             <tr class="border-b border-gray-50 hover:bg-gray-50 transition-colors">
               <td class="py-3 px-3 text-[13px] font-medium text-[#0B182A]">{customer.companyName}</td>
               <td class="py-3 px-3 text-[13px] text-gray-600">{customer.email}</td>
@@ -71,4 +77,13 @@
       </tbody>
     </table>
   </div>
+  <Pagination
+    currentPage={currentPage}
+    totalPages={totalPages}
+    totalItems={customers.length}
+    pageSize={PAGE_SIZE}
+    itemLabel="customers"
+    loading={loading}
+    onchange={(p) => (currentPage = p)}
+  />
 </div>

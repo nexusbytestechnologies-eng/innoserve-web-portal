@@ -4,11 +4,18 @@
   import { toast } from 'svelte-sonner';
   import { fetchProjectHeadTeam } from '$lib/api/project-head';
   import type { ProjectHeadEngineerGroup, ProjectHeadPlannerRow } from '$lib/api/project-head';
+  import Pagination from '$lib/components/Pagination.svelte';
 
   let loading = $state(true);
   let activeTab = $state<'planners' | 'engineers'>('planners');
   let planners = $state<ProjectHeadPlannerRow[]>([]);
   let engineersByState = $state<ProjectHeadEngineerGroup[]>([]);
+
+  const PAGE_SIZE = 15;
+  let currentPage = $state(1);
+  $effect(() => { activeTab; currentPage = 1; });
+  const totalPages      = $derived(Math.max(1, Math.ceil(planners.length / PAGE_SIZE)));
+  const pagedPlanners   = $derived(planners.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE));
 
   onMount(async () => {
     try {
@@ -65,7 +72,7 @@
             {:else if planners.length === 0}
               <tr><td colspan="3" class="py-10 text-center text-[13px] text-gray-400">No planners assigned to these projects yet</td></tr>
             {:else}
-              {#each planners as planner}
+              {#each pagedPlanners as planner}
                 <tr class="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                   <td class="py-3 px-3 text-[13px] font-medium text-[#0B182A]">{planner.name}</td>
                   <td class="py-3 px-3 text-[13px] text-gray-600">{planner.email}</td>
@@ -76,6 +83,15 @@
           </tbody>
         </table>
       </div>
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalItems={planners.length}
+        pageSize={PAGE_SIZE}
+        itemLabel="planners"
+        loading={loading}
+        onchange={(p) => (currentPage = p)}
+      />
     </div>
   {/if}
 

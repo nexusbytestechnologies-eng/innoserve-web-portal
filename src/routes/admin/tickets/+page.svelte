@@ -29,6 +29,7 @@
   import { ApiError } from '$lib/api/rest';
   import type { ClosureEligibility } from '$lib/api/ticket-closure';
   import { queryVersion } from '$lib/stores/query';
+  import Pagination from '$lib/components/Pagination.svelte';
 
   // ── Constants ─────────────────────────────────────────────────────────────
 
@@ -108,6 +109,13 @@
       ? projects.filter((project) => project.customerId === createForm.customerId)
       : projects,
   );
+
+  // ── Pagination ────────────────────────────────────────────────────────────
+  const PAGE_SIZE = 15;
+  let currentPage = $state(1);
+  $effect(() => { filterStatus; filterPriority; search; currentPage = 1; });
+  const totalPages  = $derived(Math.max(1, Math.ceil(tickets.length / PAGE_SIZE)));
+  const pagedTickets = $derived(tickets.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE));
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -480,7 +488,7 @@
               <td colspan="9" class="py-12 text-center text-[13px] text-gray-400">No tickets found</td>
             </tr>
           {:else}
-            {#each tickets as t}
+            {#each pagedTickets as t}
               <tr
                 class="border-b border-gray-50 hover:bg-gray-50/60 transition-colors
                        {normalizeStatus(t.status) === 'pending_validation' ? 'bg-purple-50/30' : ''}"
@@ -548,6 +556,15 @@
         </tbody>
       </table>
     </div>
+    <Pagination
+      currentPage={currentPage}
+      totalPages={totalPages}
+      totalItems={tickets.length}
+      pageSize={PAGE_SIZE}
+      itemLabel="tickets"
+      loading={loading}
+      onchange={(p) => (currentPage = p)}
+    />
   </div>
 </div>
 
