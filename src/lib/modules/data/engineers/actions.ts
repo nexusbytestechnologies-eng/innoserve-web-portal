@@ -9,6 +9,19 @@ export interface UpdateEngineerDocumentsStatusInput {
   documentsStatus: string;
 }
 
+export interface UpdateEngineerInput {
+  id: string;
+  userName?: string;
+  userPhone?: string;
+  addressState?: string;
+  addressCity?: string;
+  addressPincode?: string;
+  assignedState?: string;
+  bankAccountNumber?: string;
+  ifscCode?: string;
+  accountHolderName?: string;
+}
+
 // ── Functions ──────────────────────────────────────────────────────────────
 
 export async function updateEngineerDocumentsStatus(
@@ -17,6 +30,16 @@ export async function updateEngineerDocumentsStatus(
   const { id, ...body } = input;
   const result = await restRequest<EngineerProfile>(
     `/api/engineer-profiles/${id}/documents-status`,
+    { method: 'PATCH', body: JSON.stringify(body) },
+  );
+  invalidate('engineers');
+  return result;
+}
+
+export async function updateEngineer(input: UpdateEngineerInput): Promise<EngineerProfile> {
+  const { id, ...body } = input;
+  const result = await restRequest<EngineerProfile>(
+    `/api/engineer-profiles/${id}`,
     { method: 'PATCH', body: JSON.stringify(body) },
   );
   invalidate('engineers');

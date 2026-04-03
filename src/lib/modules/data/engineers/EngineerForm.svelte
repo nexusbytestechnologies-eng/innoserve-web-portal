@@ -1,42 +1,34 @@
 <script lang="ts">
-  import * as Icons from "$lib/icons";
+  import { untrack } from "svelte";
+  import type { EngineerProfile } from "./queries";
 
   let {
-    mode = "add",
     data = null,
     onSave,
     onClose,
   }: {
-    mode?: "add" | "edit";
-    data?: Record<string, unknown> | null;
-    onSave: (form: Record<string, unknown>) => void;
+    data?: EngineerProfile | null;
+    onSave: (form: Record<string, string>) => void;
     onClose: () => void;
   } = $props();
 
-  const allSkills = ["Hardware", "Networking", "Software", "Electrical", "Deployment"];
-
-  let form = $state({
-    name: (data?.name as string) ?? "",
-    location: (data?.location as string) ?? "",
-    skills: (data?.skills as string[]) ? [...(data!.skills as string[])] : [],
-    sla: (data?.sla as string) ?? "85%",
-  });
+  let form = $state(untrack(() => ({
+    userName:          data?.userName          ?? "",
+    userPhone:         data?.userPhone         ?? "",
+    addressState:      data?.addressState      ?? "",
+    addressCity:       data?.addressCity       ?? "",
+    addressPincode:    data?.addressPincode    ?? "",
+    assignedState:     data?.assignedState     ?? "",
+    bankAccountNumber: data?.bankAccountNumber ?? "",
+    ifscCode:          data?.ifscCode          ?? "",
+    accountHolderName: data?.accountHolderName ?? "",
+  })));
 
   let errors = $state<Record<string, string>>({});
 
-  function toggleSkill(skill: string) {
-    if (form.skills.includes(skill)) {
-      form.skills = form.skills.filter((s) => s !== skill);
-    } else {
-      form.skills = [...form.skills, skill];
-    }
-  }
-
   function validate() {
     errors = {};
-    if (!form.name.trim()) errors.name = "Engineer name is required";
-    if (!form.location.trim()) errors.location = "Location is required";
-    if (form.skills.length === 0) errors.skills = "Select at least one skill";
+    if (!form.userName.trim()) errors.userName = "Full name is required";
     return Object.keys(errors).length === 0;
   }
 
@@ -51,6 +43,7 @@
   const labelClass = "flex flex-col gap-1.5";
   const labelTextClass = "text-[11px] font-semibold text-gray-500 uppercase tracking-wide";
   const errorClass = "text-[11px] text-red-500 mt-0.5";
+  const sectionClass = "text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3 mt-1";
 </script>
 
 <!-- Backdrop -->
@@ -64,22 +57,18 @@
     class="bg-white rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] flex flex-col"
     role="dialog"
     aria-modal="true"
-    aria-label={mode === "add" ? "Add Engineer" : "Edit Engineer"}
+    aria-label="Edit Engineer"
     onclick={(e) => e.stopPropagation()}
   >
     <!-- Header -->
     <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
       <div>
-        <h2 class="text-[16px] font-semibold text-[#0B182A]">
-          {mode === "add" ? "Add Engineer" : "Edit Engineer"}
-        </h2>
-        <p class="text-[12px] text-gray-400 mt-0.5">
-          {mode === "add" ? "Register a new field engineer" : "Update the engineer details below"}
-        </p>
+        <h2 class="text-[16px] font-semibold text-[#0B182A]">Edit Engineer</h2>
+        <p class="text-[12px] text-gray-400 mt-0.5">Update the engineer's profile details</p>
       </div>
       <button
         onclick={onClose}
-        class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600"
+        class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600 cursor-pointer"
         aria-label="Close"
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -90,61 +79,58 @@
 
     <!-- Body -->
     <form class="px-6 py-5 flex flex-col gap-4 overflow-y-auto" onsubmit={handleSubmit}>
-      <!-- Name -->
-      <label class={labelClass}>
-        <span class={labelTextClass}>Full Name <span class="text-red-400">*</span></span>
-        <input
-          type="text"
-          placeholder="e.g. Rajesh Kumar"
-          class={fieldClass}
-          bind:value={form.name}
-        />
-        {#if errors.name}<span class={errorClass}>{errors.name}</span>{/if}
-      </label>
 
-      <!-- Location -->
-      <label class={labelClass}>
-        <span class={labelTextClass}>Location <span class="text-red-400">*</span></span>
-        <input
-          type="text"
-          placeholder="e.g. Mumbai, Maharashtra"
-          class={fieldClass}
-          bind:value={form.location}
-        />
-        {#if errors.location}<span class={errorClass}>{errors.location}</span>{/if}
-      </label>
-
-      <!-- Skills -->
-      <div class={labelClass}>
-        <span class={labelTextClass}>Skills <span class="text-red-400">*</span></span>
-        <div class="flex flex-wrap gap-2 mt-1">
-          {#each allSkills as skill}
-            <button
-              type="button"
-              onclick={() => toggleSkill(skill)}
-              class="px-3.5 py-1.5 rounded-lg text-[12px] font-medium border transition-all cursor-pointer
-                     {form.skills.includes(skill)
-                       ? 'bg-[#0B182A] text-white border-[#0B182A]'
-                       : 'bg-white text-gray-500 border-gray-200 hover:border-[#0B182A]'}"
-            >
-              {skill}
-            </button>
-          {/each}
-        </div>
-        {#if errors.skills}<span class={errorClass}>{errors.skills}</span>{/if}
+      <!-- Personal -->
+      <p class={sectionClass}>Personal Info</p>
+      <div class="grid grid-cols-2 gap-4">
+        <label class="{labelClass} col-span-2">
+          <span class={labelTextClass}>Full Name <span class="text-red-400">*</span></span>
+          <input type="text" placeholder="e.g. Rajesh Kumar" class={fieldClass} bind:value={form.userName} />
+          {#if errors.userName}<span class={errorClass}>{errors.userName}</span>{/if}
+        </label>
+        <label class={labelClass}>
+          <span class={labelTextClass}>Phone</span>
+          <input type="tel" placeholder="e.g. 9876543210" class={fieldClass} bind:value={form.userPhone} />
+        </label>
       </div>
 
-      <!-- SLA Target -->
-      <label class={labelClass}>
-        <span class={labelTextClass}>SLA Target</span>
-        <select class={fieldClass} bind:value={form.sla}>
-          <option value="95%">95%</option>
-          <option value="90%">90%</option>
-          <option value="85%">85%</option>
-          <option value="80%">80%</option>
-          <option value="75%">75%</option>
-        </select>
-      </label>
+      <!-- Address -->
+      <p class={sectionClass}>Address</p>
+      <div class="grid grid-cols-2 gap-4">
+        <label class={labelClass}>
+          <span class={labelTextClass}>State</span>
+          <input type="text" placeholder="e.g. Maharashtra" class={fieldClass} bind:value={form.addressState} />
+        </label>
+        <label class={labelClass}>
+          <span class={labelTextClass}>City</span>
+          <input type="text" placeholder="e.g. Mumbai" class={fieldClass} bind:value={form.addressCity} />
+        </label>
+        <label class={labelClass}>
+          <span class={labelTextClass}>Pincode</span>
+          <input type="text" placeholder="e.g. 400001" class={fieldClass} bind:value={form.addressPincode} />
+        </label>
+        <label class={labelClass}>
+          <span class={labelTextClass}>Assigned State</span>
+          <input type="text" placeholder="e.g. Maharashtra" class={fieldClass} bind:value={form.assignedState} />
+        </label>
+      </div>
+
+      <!-- Bank -->
+      <p class={sectionClass}>Bank Details</p>
+      <div class="grid grid-cols-2 gap-4">
+        <label class="{labelClass} col-span-2">
+          <span class={labelTextClass}>Account Holder Name</span>
+          <input type="text" placeholder="e.g. Rajesh Kumar" class={fieldClass} bind:value={form.accountHolderName} />
+        </label>
+        <label class={labelClass}>
+          <span class={labelTextClass}>Account Number</span>
+          <input type="text" placeholder="e.g. 1234567890" class={fieldClass} bind:value={form.bankAccountNumber} />
+        </label>
+        <label class={labelClass}>
+          <span class={labelTextClass}>IFSC Code</span>
+          <input type="text" placeholder="e.g. SBIN0001234" class={fieldClass} bind:value={form.ifscCode} />
+        </label>
+      </div>
 
       <!-- Footer -->
       <div class="flex justify-end gap-3 pt-2 border-t border-gray-100 mt-1">
@@ -157,9 +143,9 @@
         </button>
         <button
           type="submit"
-          class="px-5 py-2.5 text-[13px] text-white font-semibold bg-[#E87D1F] hover:bg-[#d06a10] rounded-lg transition-colors cursor-pointer"
+          class="px-5 py-2.5 text-[13px] text-white font-semibold bg-[linear-gradient(to_bottom,#0B182A,#021E44)] hover:opacity-90 rounded-lg transition-opacity cursor-pointer"
         >
-          {mode === "add" ? "Add Engineer" : "Save Changes"}
+          Save Changes
         </button>
       </div>
     </form>
