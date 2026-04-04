@@ -19,9 +19,11 @@ export interface EngineerOnboardingFormData {
   profilePhoto?: File;        // optional
 
   // KYC Documents (File objects from the form)
-  aadhaarFile: File;
+  aadhaarFront: File;
+  aadhaarBack: File;
   panFile: File;
-  dlFile: File;
+  dlFront: File;
+  dlBack: File;
 
   // Bank Details
   accountHolderName: string;
@@ -40,9 +42,11 @@ export interface EngineerOnboardingInput {
   city: string;
   pincode: string;
   profilePhotoId?: number;
-  aadhaarFileId: number;
+  aadhaarFrontId: number;
+  aadhaarBackId: number;
   panFileId: number;
-  dlFileId: number;
+  dlFrontId: number;
+  dlBackId: number;
   accountHolderName: string;
   accountNumber: string;
   ifsc: string;
@@ -68,6 +72,8 @@ const SUBMIT_ENGINEER_ONBOARDING = `
     }
   }
 `;
+// NOTE: The backend GraphQL schema must accept aadhaarFrontId, aadhaarBackId,
+// dlFrontId, dlBackId in place of the old aadhaarFileId / dlFileId fields.
 
 // ── Main function ────────────────────────────────────────────────────────────
 //
@@ -80,11 +86,13 @@ export async function submitEngineerOnboarding(
   formData: EngineerOnboardingFormData,
 ): Promise<EngineerOnboardingResult> {
   // Upload all documents in parallel (profile photo is optional)
-  const [aadhaarFileId, panFileId, dlFileId, cancelChequeFileId, profilePhotoId] =
+  const [aadhaarFrontId, aadhaarBackId, panFileId, dlFrontId, dlBackId, cancelChequeFileId, profilePhotoId] =
     await Promise.all([
-      uploadFile(formData.aadhaarFile),
+      uploadFile(formData.aadhaarFront),
+      uploadFile(formData.aadhaarBack),
       uploadFile(formData.panFile),
-      uploadFile(formData.dlFile),
+      uploadFile(formData.dlFront),
+      uploadFile(formData.dlBack),
       uploadFile(formData.cancelChequeFile),
       formData.profilePhoto ? uploadFile(formData.profilePhoto) : Promise.resolve(undefined),
     ]);
@@ -99,9 +107,11 @@ export async function submitEngineerOnboarding(
     accountHolderName: formData.accountHolderName,
     accountNumber: formData.accountNumber,
     ifsc: formData.ifsc,
-    aadhaarFileId,
+    aadhaarFrontId,
+    aadhaarBackId,
     panFileId,
-    dlFileId,
+    dlFrontId,
+    dlBackId,
     cancelChequeFileId,
     ...(profilePhotoId ? { profilePhotoId } : {}),
   };

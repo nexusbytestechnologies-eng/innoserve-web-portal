@@ -23,10 +23,12 @@
   const profilePhoto = $derived(toRelUrl(engineer.profilePhotoUrl));
 
   const docs = $derived([
-    { label: "Aadhaar Card",    url: toRelUrl(engineer.aadhaarUrl) },
-    { label: "PAN Card",        url: toRelUrl(engineer.panCardUrl) },
-    { label: "Driving Licence", url: toRelUrl(engineer.dlUrl) },
-    { label: "Cancel Cheque",   url: toRelUrl(engineer.cancelChequeUrl) },
+    { label: "Aadhaar Card (Front)",    url: toRelUrl(engineer.aadhaarFrontUrl) },
+    { label: "Aadhaar Card (Back)",     url: toRelUrl(engineer.aadhaarBackUrl) },
+    { label: "PAN Card",                url: toRelUrl(engineer.panCardUrl) },
+    { label: "Driving Licence (Front)", url: toRelUrl(engineer.dlFrontUrl) },
+    { label: "Driving Licence (Back)",  url: toRelUrl(engineer.dlBackUrl) },
+    { label: "Cancel Cheque",           url: toRelUrl(engineer.cancelChequeUrl) },
   ]);
 
   let lightboxUrl = $state<string | null>(null);

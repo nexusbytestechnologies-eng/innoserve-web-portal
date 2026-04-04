@@ -21,11 +21,13 @@
   }
 
   let docs = $derived([
-    { label: "Profile Photo",  url: toRelativeFileUrl(eng.profilePhotoUrl) },
-    { label: "Aadhaar Card",   url: toRelativeFileUrl(eng.aadhaarUrl) },
-    { label: "PAN Card",       url: toRelativeFileUrl(eng.panCardUrl) },
-    { label: "Driving Licence",url: toRelativeFileUrl(eng.dlUrl) },
-    { label: "Cancel Cheque",  url: toRelativeFileUrl(eng.cancelChequeUrl) },
+    { label: "Profile Photo",       url: toRelativeFileUrl(eng.profilePhotoUrl) },
+    { label: "Aadhaar Card (Front)",url: toRelativeFileUrl(eng.aadhaarFrontUrl) },
+    { label: "Aadhaar Card (Back)", url: toRelativeFileUrl(eng.aadhaarBackUrl) },
+    { label: "PAN Card",            url: toRelativeFileUrl(eng.panCardUrl) },
+    { label: "Driving Licence (Front)", url: toRelativeFileUrl(eng.dlFrontUrl) },
+    { label: "Driving Licence (Back)",  url: toRelativeFileUrl(eng.dlBackUrl) },
+    { label: "Cancel Cheque",       url: toRelativeFileUrl(eng.cancelChequeUrl) },
   ]);
 </script>
 
