@@ -15,13 +15,14 @@ import { writable, derived } from 'svelte/store';
 
 // ── Keys ───────────────────────────────────────────────────────────────────
 
-export type QueryKey = 'customers' | 'engineers' | 'projects' | 'tickets';
+export type QueryKey = 'customers' | 'engineers' | 'inventory' | 'projects' | 'tickets';
 
 // ── Internal version counter ───────────────────────────────────────────────
 
 const _versions = writable<Record<QueryKey, number>>({
   customers: 0,
   engineers: 0,
+  inventory: 0,
   projects:  0,
   tickets:   0,
 });

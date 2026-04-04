@@ -58,13 +58,13 @@
   async function handleExport() {
     exporting = true;
     try {
-      const res = await fetch('/api/reports/payouts/export', { credentials: 'include' });
+      const res = await fetch('/api/payouts/export', { credentials: 'include' });
       if (!res.ok) throw new Error(await res.text() || 'Export failed');
       const blob = await res.blob();
       const url  = URL.createObjectURL(blob);
       const a    = document.createElement('a');
       a.href     = url;
-      a.download = `payouts-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.download = 'payouts.xlsx';
       document.body.appendChild(a);
       a.click();
       a.remove();

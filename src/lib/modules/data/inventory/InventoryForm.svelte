@@ -1,34 +1,32 @@
 <script lang="ts">
-  import * as Icons from "$lib/icons";
+  import { untrack } from "svelte";
 
   interface InventoryFormData {
     name?: string;
-    category?: string;
-    qty?: number;
+    sku?: string;
+    quantity?: number;
     location?: string;
-    assigned?: string;
-    status?: string;
   }
 
   let {
     mode = "add",
     data = null,
+    saving = false,
     onSave,
     onClose,
   }: {
     mode?: "add" | "edit";
     data?: InventoryFormData | null;
+    saving?: boolean;
     onSave: (form: Record<string, unknown>) => void;
     onClose: () => void;
   } = $props();
 
   let form = $state({
-    name: (data?.name as string) ?? "",
-    category: (data?.category as string) ?? "Networking",
-    qty: String(data?.qty ?? ""),
-    location: (data?.location as string) ?? "",
-    assigned: (data?.assigned as string) ?? "",
-    status: (data?.status as string) ?? "Active",
+    name: untrack(() => data?.name ?? ""),
+    sku: untrack(() => data?.sku ?? ""),
+    quantity: untrack(() => String(data?.quantity ?? "")),
+    location: untrack(() => data?.location ?? ""),
   });
 
   let errors = $state<Record<string, string>>({});
@@ -36,8 +34,9 @@
   function validate() {
     errors = {};
     if (!form.name.trim()) errors.name = "Item name is required";
-    if (!form.qty.trim() || isNaN(Number(form.qty)) || Number(form.qty) < 0)
-      errors.qty = "Enter a valid quantity";
+    if (!form.sku.trim()) errors.sku = "SKU is required";
+    if (!form.quantity.trim() || isNaN(Number(form.quantity)) || Number(form.quantity) < 0)
+      errors.quantity = "Enter a valid quantity";
     if (!form.location.trim()) errors.location = "Location is required";
     return Object.keys(errors).length === 0;
   }
@@ -45,7 +44,7 @@
   function handleSubmit(e: Event) {
     e.preventDefault();
     if (!validate()) return;
-    onSave({ ...form, qty: Number(form.qty) });
+    onSave({ ...form, quantity: Number(form.quantity) });
   }
 
   const fieldClass =
@@ -65,9 +64,11 @@
   <div
     class="bg-white rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] flex flex-col"
     role="dialog"
+    tabindex="-1"
     aria-modal="true"
     aria-label={mode === "add" ? "Add Inventory Item" : "Edit Inventory Item"}
     onclick={(e) => e.stopPropagation()}
+    onkeydown={(e) => e.stopPropagation()}
   >
     <!-- Header -->
     <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
@@ -104,17 +105,17 @@
         {#if errors.name}<span class={errorClass}>{errors.name}</span>{/if}
       </label>
 
-      <!-- Row: Category + Quantity -->
+      <!-- Row: SKU + Quantity -->
       <div class="grid grid-cols-2 gap-4">
         <label class={labelClass}>
-          <span class={labelTextClass}>Category</span>
-          <select class={fieldClass} bind:value={form.category}>
-            <option value="Networking">Networking</option>
-            <option value="Storage">Storage</option>
-            <option value="Power">Power</option>
-            <option value="Cable">Cable</option>
-            <option value="Tools">Tools</option>
-          </select>
+          <span class={labelTextClass}>SKU <span class="text-red-400">*</span></span>
+          <input
+            type="text"
+            placeholder="e.g. SKU-001"
+            class={fieldClass}
+            bind:value={form.sku}
+          />
+          {#if errors.sku}<span class={errorClass}>{errors.sku}</span>{/if}
         </label>
         <label class={labelClass}>
           <span class={labelTextClass}>Quantity <span class="text-red-400">*</span></span>
@@ -123,15 +124,15 @@
             min="0"
             placeholder="0"
             class={fieldClass}
-            bind:value={form.qty}
+            bind:value={form.quantity}
           />
-          {#if errors.qty}<span class={errorClass}>{errors.qty}</span>{/if}
+          {#if errors.quantity}<span class={errorClass}>{errors.quantity}</span>{/if}
         </label>
       </div>
 
       <!-- Location -->
       <label class={labelClass}>
-        <span class={labelTextClass}>Location / State <span class="text-red-400">*</span></span>
+        <span class={labelTextClass}>Location <span class="text-red-400">*</span></span>
         <input
           type="text"
           placeholder="e.g. Kerala"
@@ -140,26 +141,6 @@
         />
         {#if errors.location}<span class={errorClass}>{errors.location}</span>{/if}
       </label>
-
-      <!-- Row: Assigned To + Status -->
-      <div class="grid grid-cols-2 gap-4">
-        <label class={labelClass}>
-          <span class={labelTextClass}>Assigned To</span>
-          <input
-            type="text"
-            placeholder="e.g. Arun (optional)"
-            class={fieldClass}
-            bind:value={form.assigned}
-          />
-        </label>
-        <label class={labelClass}>
-          <span class={labelTextClass}>Status</span>
-          <select class={fieldClass} bind:value={form.status}>
-            <option value="Active">Active</option>
-            <option value="Inactive">Inactive</option>
-          </select>
-        </label>
-      </div>
 
       <!-- Footer -->
       <div class="flex justify-end gap-3 pt-2 border-t border-gray-100 mt-1">
@@ -172,9 +153,10 @@
         </button>
         <button
           type="submit"
-          class="px-5 py-2.5 text-[13px] text-white font-semibold bg-[#E87D1F] hover:bg-[#d06a10] rounded-lg transition-colors cursor-pointer"
+          disabled={saving}
+          class="px-5 py-2.5 text-[13px] text-white font-semibold bg-[#E87D1F] hover:bg-[#d06a10] rounded-lg transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          {mode === "add" ? "Add Item" : "Save Changes"}
+          {saving ? "Saving…" : mode === "add" ? "Add Item" : "Save Changes"}
         </button>
       </div>
     </form>

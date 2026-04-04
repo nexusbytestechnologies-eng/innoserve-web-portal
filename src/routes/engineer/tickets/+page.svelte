@@ -8,6 +8,8 @@
     createTicketHistory,
     uploadTicketAttachment,
   } from '$lib/modules/data/tickets/actions';
+  import { restRequest } from '$lib/api/rest';
+  import type { InventoryItem } from '$lib/modules/data/inventory/actions';
   import { escalateTicket, updateTicketStatus } from '$lib/api/tickets';
   import {
     fetchTicketReplacement,
@@ -222,6 +224,7 @@
     if (ns === 'in_progress') {
       return [
         { label: 'Mark Resolved', onClick: () => markResolved(t), disabled: markingResolved === t.id },
+        { label: 'Use Item',      onClick: () => openUseItem(t) },
         { label: 'Upload Proof',  onClick: () => openUpload(t) },
         { label: 'Escalate',      onClick: () => openEscalate(t) },
       ];
@@ -401,6 +404,71 @@
     }
   }
 
+  // ── Use Item ──────────────────────────────────────────────────────────────
+
+  let useItemTicket = $state<Ticket | null>(null);
+  let useItemForm = $state({ inventoryItemId: '', quantity: '' });
+  let useItemSaving = $state(false);
+  let inventoryItems = $state<InventoryItem[]>([]);
+  let inventoryLoading = $state(false);
+
+  async function openUseItem(ticket: Ticket) {
+    useItemTicket = ticket;
+    useItemForm = { inventoryItemId: '', quantity: '' };
+    if (inventoryItems.length === 0) {
+      inventoryLoading = true;
+      try {
+        inventoryItems = await restRequest<InventoryItem[]>('/api/inventory');
+      } catch {
+        toast.error('Failed to load inventory');
+      } finally {
+        inventoryLoading = false;
+      }
+    }
+  }
+
+  async function submitUseItem() {
+    if (!useItemTicket || !useItemForm.inventoryItemId || !useItemForm.quantity) return;
+    useItemSaving = true;
+    try {
+      await restRequest(`/api/tickets/${useItemTicket.id}/use-item`, {
+        method: 'POST',
+        body: JSON.stringify({
+          inventoryItemId: useItemForm.inventoryItemId,
+          quantity: Number(useItemForm.quantity),
+        }),
+      });
+      invalidate('tickets');
+      toast.success('Item usage recorded');
+      useItemTicket = null;
+    } catch (err) {
+      toast.error(`Failed: ${(err as Error).message}`);
+    } finally {
+      useItemSaving = false;
+    }
+  }
+
+  // ── Ticket Detail ─────────────────────────────────────────────────────────
+
+  type UsedItem = { name: string; quantity: number };
+
+  let detailTicket = $state<Ticket | null>(null);
+  let usedItems = $state<UsedItem[]>([]);
+  let usedItemsLoading = $state(false);
+
+  async function openDetail(ticket: Ticket) {
+    detailTicket = ticket;
+    usedItems = [];
+    usedItemsLoading = true;
+    try {
+      usedItems = await restRequest<UsedItem[]>(`/api/tickets/${ticket.id}/items`);
+    } catch {
+      // non-critical — show empty state
+    } finally {
+      usedItemsLoading = false;
+    }
+  }
+
   // ── Device Replacement ────────────────────────────────────────────────────
 
   async function openTracker(ticket: Ticket) {
@@ -449,7 +517,7 @@
       <table class="w-full text-sm border-collapse">
         <thead>
           <tr class="border-b border-gray-100">
-            {#each ['TICKET', 'PROJECT', 'ISSUE', 'STATUS', 'PRIORITY', 'ESCALATION', 'DATE', 'ACTIONS'] as col}
+            {#each ['TICKET', 'PROJECT', 'ISSUE', 'STATUS', 'PRIORITY', 'ESCALATION', 'DATE', '', 'ACTIONS'] as col}
               <th class="text-left text-[11px] font-semibold text-gray-400 tracking-wide py-3 px-3 whitespace-nowrap">{col}</th>
             {/each}
           </tr>
@@ -457,7 +525,7 @@
         <tbody>
           {#if loading}
             <tr>
-              <td colspan="8" class="py-12 text-center text-[13px] text-gray-400">
+              <td colspan="9" class="py-12 text-center text-[13px] text-gray-400">
                 <div class="flex items-center justify-center gap-2">
                   <div class="w-4 h-4 border-2 border-gray-200 border-t-[#0B182A] rounded-full animate-spin"></div>
                   Loading…
@@ -509,6 +577,15 @@
                   {/if}
                 </td>
                 <td class="py-3 px-3 text-[12px] text-gray-400 whitespace-nowrap">{fmtDate(t.createdAt)}</td>
+                <td class="py-3 px-3">
+                  <button
+                    onclick={() => openDetail(t)}
+                    class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-[#0B182A] hover:bg-gray-100 transition-colors"
+                    aria-label="View details"
+                  >
+                    <Icons.Eye size={15} />
+                  </button>
+                </td>
                 <td class="py-3 px-3">
                   {#if getTicketActions(t).length > 0}
                     <button
@@ -733,6 +810,164 @@
                  {escalationLevel === 'L3' ? 'bg-red-500' : 'bg-[#E87D1F]'}"
         >
           {escalating ? 'Sending…' : `Request ${escalationLevel || '…'} Support`}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- ── Ticket Detail Modal ──────────────��──────────────────────────��──────── -->
+{#if detailTicket}
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+    role="presentation"
+    onclick={() => (detailTicket = null)}
+  >
+    <div
+      class="bg-white rounded-2xl w-full max-w-md shadow-2xl"
+      role="dialog"
+      tabindex="-1"
+      aria-modal="true"
+      aria-label="Ticket Details"
+      onclick={(e) => e.stopPropagation()}
+      onkeydown={(e) => e.stopPropagation()}
+    >
+      <!-- Header -->
+      <div class="flex items-start justify-between px-6 py-4 border-b border-gray-100">
+        <div>
+          <p class="text-[11px] font-semibold text-[#E87D1F] mb-0.5">
+            {detailTicket.ticketNumber || detailTicket.id.slice(0, 8)}
+          </p>
+          <h2 class="text-[15px] font-semibold text-[#0B182A] max-w-[260px] leading-tight">{detailTicket.title}</h2>
+        </div>
+        <button onclick={() => (detailTicket = null)} class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors shrink-0" aria-label="Close">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <!-- Body -->
+      <div class="px-6 py-5 flex flex-col gap-4">
+        <!-- Ticket meta -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Status</p>
+            <span class="text-[11px] font-semibold px-2.5 py-1 rounded-full {statusBadge(detailTicket.status)}">
+              {statusLabel(detailTicket.status)}
+            </span>
+          </div>
+          <div>
+            <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Priority</p>
+            <span class="text-[11px] font-semibold px-2.5 py-1 rounded-full {priorityBadge(detailTicket.priority)}">
+              {detailTicket.priority || '—'}
+            </span>
+          </div>
+        </div>
+
+        <!-- Used Items -->
+        <div>
+          <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Items Used</p>
+          {#if usedItemsLoading}
+            <p class="text-[13px] text-gray-400">Loading…</p>
+          {:else if usedItems.length === 0}
+            <p class="text-[13px] text-gray-400">No items used for this ticket.</p>
+          {:else}
+            <div class="rounded-xl border border-gray-100 overflow-hidden">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="border-b border-gray-100 bg-gray-50">
+                    <th class="text-left text-[11px] font-semibold text-gray-400 tracking-wide px-4 py-2.5">ITEM</th>
+                    <th class="text-right text-[11px] font-semibold text-gray-400 tracking-wide px-4 py-2.5">QTY</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each usedItems as item}
+                    <tr class="border-b border-gray-50 last:border-0">
+                      <td class="px-4 py-2.5 text-[13px] text-gray-700 font-medium">{item.name}</td>
+                      <td class="px-4 py-2.5 text-[13px] text-gray-600 text-right">{item.quantity}</td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          {/if}
+        </div>
+      </div>
+
+      <div class="flex justify-end px-6 pb-5">
+        <button onclick={() => (detailTicket = null)} class="px-5 py-2.5 text-[13px] text-gray-600 border border-gray-200 rounded-lg hover:border-gray-400 transition-colors cursor-pointer">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- ── Use Item Modal ────────────────────────────��────────────────────────── -->
+{#if useItemTicket}
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+    role="presentation"
+    onclick={() => (useItemTicket = null)}
+  >
+    <div
+      class="bg-white rounded-2xl w-full max-w-sm shadow-2xl"
+      role="dialog"
+      tabindex="-1"
+      aria-modal="true"
+      aria-label="Use Item"
+      onclick={(e) => e.stopPropagation()}
+      onkeydown={(e) => e.stopPropagation()}
+    >
+      <div class="flex items-start justify-between px-6 py-4 border-b border-gray-100">
+        <div>
+          <p class="text-[11px] font-semibold text-[#E87D1F] mb-0.5">
+            {useItemTicket.ticketNumber || useItemTicket.id.slice(0, 8)}
+          </p>
+          <h2 class="text-[15px] font-semibold text-[#0B182A]">Use Item</h2>
+          <p class="text-[12px] text-gray-400 mt-0.5">Record inventory usage for this ticket</p>
+        </div>
+        <button onclick={() => (useItemTicket = null)} class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors shrink-0" aria-label="Close">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div class="px-6 py-5 flex flex-col gap-4">
+        <label class="flex flex-col gap-1.5">
+          <span class="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Item</span>
+          {#if inventoryLoading}
+            <div class="text-[13px] text-gray-400 py-2">Loading inventory…</div>
+          {:else}
+            <select bind:value={useItemForm.inventoryItemId} class={fieldClass}>
+              <option value="" disabled>Select an item</option>
+              {#each inventoryItems as item}
+                <option value={item.id}>{item.name} — {item.sku}</option>
+              {/each}
+            </select>
+          {/if}
+        </label>
+
+        <label class="flex flex-col gap-1.5">
+          <span class="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Quantity</span>
+          <input
+            type="number"
+            min="1"
+            placeholder="e.g. 2"
+            bind:value={useItemForm.quantity}
+            class={fieldClass}
+          />
+        </label>
+      </div>
+
+      <div class="flex justify-end gap-3 px-6 pb-5 border-t border-gray-100 pt-4">
+        <button onclick={() => (useItemTicket = null)} class="px-5 py-2.5 text-[13px] text-gray-600 border border-gray-200 rounded-lg hover:border-gray-400 transition-colors cursor-pointer">
+          Cancel
+        </button>
+        <button
+          onclick={submitUseItem}
+          disabled={useItemSaving || !useItemForm.inventoryItemId || !useItemForm.quantity}
+          class="px-5 py-2.5 text-[13px] font-semibold text-white bg-[linear-gradient(to_bottom,#0B182A,#021E44)] rounded-lg hover:opacity-90 transition-opacity disabled:opacity-60 cursor-pointer"
+        >
+          {useItemSaving ? 'Saving…' : 'Confirm'}
         </button>
       </div>
     </div>
