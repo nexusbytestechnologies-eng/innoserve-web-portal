@@ -30,6 +30,9 @@
   import type { ClosureEligibility } from '$lib/api/ticket-closure';
   import { queryVersion } from '$lib/stores/query';
   import Pagination from '$lib/components/Pagination.svelte';
+  import { authStore } from '$lib/stores/auth';
+
+  const user = $derived($authStore.user);
 
   // ── Constants ─────────────────────────────────────────────────────────────
 
@@ -59,6 +62,7 @@
   // Create modal
   let showCreateModal = $state(false);
   let creatingTicket = $state(false);
+  let autoAssign = $state(true);
   let createErrors = $state<Record<string, string>>({});
   let createForm = $state({
     customerId: '',
@@ -253,6 +257,7 @@
         city: createForm.city.trim() || undefined,
         pincode: createForm.pincode.trim() || undefined,
         address: createForm.address.trim() || undefined,
+        ...(user?.role === 'super_admin' && { autoAssign }),
       });
 
       allTickets = [created, ...allTickets];
@@ -696,6 +701,30 @@
             class="{fieldClass} resize-none"
           ></textarea>
         </label>
+
+        {#if user?.role === 'super_admin'}
+          <div class="flex items-center gap-3 pt-1">
+            <button
+              type="button"
+              id="auto-assign"
+              role="switch"
+              aria-checked={autoAssign}
+              aria-label="Auto-assign to engineer"
+              onclick={() => (autoAssign = !autoAssign)}
+              class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors {autoAssign ? 'bg-[#0B182A]' : 'bg-gray-200'}"
+            >
+              <span
+                class="pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow transition-transform {autoAssign ? 'translate-x-4' : 'translate-x-0'}"
+              ></span>
+            </button>
+            <label for="auto-assign" class="text-[13px] font-medium text-gray-700 cursor-pointer">
+              Auto-assign to engineer
+            </label>
+            <span class="text-[11px] text-gray-400">
+              {autoAssign ? 'Will be assigned automatically via round-robin' : 'Ticket will stay open — assign manually later'}
+            </span>
+          </div>
+        {/if}
       </div>
 
       <div class="flex justify-end gap-2 px-6 pb-5 border-t border-gray-100 pt-4 shrink-0">
