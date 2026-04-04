@@ -63,6 +63,7 @@
   function validate() {
     errors = {};
     if (!form.name.trim()) errors.name = "Project name is required";
+    else if (form.name.trim().length < 2) errors.name = "Project name must be at least 2 characters";
     if (!form.customerId) errors.customerId = "Customer is required";
     if (!form.location.trim()) errors.location = "Location is required";
     return Object.keys(errors).length === 0;
@@ -124,7 +125,7 @@
         <input
           type="text"
           placeholder="e.g. ATM Deployment"
-          class={fieldClass}
+          class="{fieldClass} {errors.name ? 'border-red-400 focus:border-red-400' : ''}"
           bind:value={form.name}
         />
         {#if errors.name}<span class={errorClass}>{errors.name}</span>{/if}
@@ -138,7 +139,7 @@
         {:else if customers.length === 0}
           <div class="px-4 py-3 rounded-lg bg-amber-50 border border-amber-200 text-[13px] text-amber-700">No active customers available</div>
         {:else}
-          <select class={fieldClass} bind:value={form.customerId}>
+          <select class="{fieldClass} {errors.customerId ? 'border-red-400 focus:border-red-400' : ''}" bind:value={form.customerId}>
             <option value="">— Select Customer —</option>
             {#each customers as c}
               <option value={c.id}>{c.companyName}</option>
@@ -155,7 +156,7 @@
           <input
             type="text"
             placeholder="e.g. Kerala"
-            class={fieldClass}
+            class="{fieldClass} {errors.location ? 'border-red-400 focus:border-red-400' : ''}"
             bind:value={form.location}
           />
           {#if errors.location}<span class={errorClass}>{errors.location}</span>{/if}

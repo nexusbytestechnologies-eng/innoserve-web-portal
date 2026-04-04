@@ -23,8 +23,11 @@
 
   function validate() {
     errors = {};
-    if (!form.quantity.trim() || isNaN(Number(form.quantity)) || Number(form.quantity) <= 0)
-      errors.quantity = "Enter a valid quantity greater than 0";
+    const qty = form.quantity.trim();
+    if (!qty) errors.quantity = "Quantity is required";
+    else if (!/^\d+$/.test(qty)) errors.quantity = "Quantity must be a whole number";
+    else if (Number(qty) <= 0) errors.quantity = "Quantity must be greater than 0";
+    if (form.remarks.trim().length > 500) errors.remarks = "Remarks must not exceed 500 characters";
     return Object.keys(errors).length === 0;
   }
 
@@ -94,8 +97,9 @@
         <input
           type="number"
           min="1"
+          step="1"
           placeholder="e.g. 10"
-          class={fieldClass}
+          class="{fieldClass} {errors.quantity ? 'border-red-400 focus:border-red-400' : ''}"
           bind:value={form.quantity}
         />
         {#if errors.quantity}<span class={errorClass}>{errors.quantity}</span>{/if}
@@ -106,9 +110,10 @@
         <textarea
           rows="3"
           placeholder="e.g. Received from supplier"
-          class="{fieldClass} resize-none"
+          class="{fieldClass} resize-none {errors.remarks ? 'border-red-400 focus:border-red-400' : ''}"
           bind:value={form.remarks}
         ></textarea>
+        {#if errors.remarks}<span class={errorClass}>{errors.remarks}</span>{/if}
       </label>
 
       <!-- Footer -->

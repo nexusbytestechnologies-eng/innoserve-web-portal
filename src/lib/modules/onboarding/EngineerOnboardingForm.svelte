@@ -65,9 +65,11 @@
     pincode: "",
     profilePhoto: null as File | null,
     profilePhotoPreview: "",
-    aadhaarFile: null as File | null,
+    aadhaarFront: null as File | null,
+    aadhaarBack: null as File | null,
     panFile: null as File | null,
-    dlFile: null as File | null,
+    dlFront: null as File | null,
+    dlBack: null as File | null,
     accountHolderName: "",
     accountNumber: "",
     confirmAccountNumber: "",
@@ -178,14 +180,26 @@
     }
 
     if (step === 1) {
-      const aadhaarErr = validateFile(form.aadhaarFile, "Aadhaar card");
-      if (aadhaarErr) errors.aadhaarFile = aadhaarErr;
+      const aadhaarFrontErr = validateFile(
+        form.aadhaarFront,
+        "Aadhaar card (front)",
+      );
+      if (aadhaarFrontErr) errors.aadhaarFront = aadhaarFrontErr;
+
+      const aadhaarBackErr = validateFile(
+        form.aadhaarBack,
+        "Aadhaar card (back)",
+      );
+      if (aadhaarBackErr) errors.aadhaarBack = aadhaarBackErr;
 
       const panErr = validateFile(form.panFile, "PAN card");
       if (panErr) errors.panFile = panErr;
 
-      const dlErr = validateFile(form.dlFile, "Driving license");
-      if (dlErr) errors.dlFile = dlErr;
+      const dlFrontErr = validateFile(form.dlFront, "Driving license (front)");
+      if (dlFrontErr) errors.dlFront = dlFrontErr;
+
+      const dlBackErr = validateFile(form.dlBack, "Driving license (back)");
+      if (dlBackErr) errors.dlBack = dlBackErr;
     }
 
     if (step === 2) {
@@ -261,9 +275,11 @@
         city: form.city,
         pincode: form.pincode,
         profilePhoto: form.profilePhoto ?? undefined,
-        aadhaarFile: form.aadhaarFile!,
+        aadhaarFront: form.aadhaarFront!,
+        aadhaarBack: form.aadhaarBack!,
         panFile: form.panFile!,
-        dlFile: form.dlFile!,
+        dlFront: form.dlFront!,
+        dlBack: form.dlBack!,
         accountHolderName: form.accountHolderName,
         accountNumber: form.accountNumber,
         ifsc: form.ifsc,
@@ -750,75 +766,158 @@
                 <span class={labelTextClass}
                   >Aadhaar Card <span class="text-red-400">*</span></span
                 >
-                <label for="aadhaarInput" class="cursor-pointer">
-                  <div
-                    class="border-2 border-dashed rounded-xl p-5 text-center transition-all"
-                    class:border-green-400={form.aadhaarFile}
-                    class:bg-green-50={form.aadhaarFile}
-                    style={!form.aadhaarFile && errors.aadhaarFile
-                      ? "border-color:#fca5a5;background:#fef2f2"
-                      : !form.aadhaarFile
-                        ? "border-color:#e5e7eb;background:#f9fafb"
-                        : ""}
-                  >
-                    {#if form.aadhaarFile}
-                      <div class="flex items-center justify-center gap-2">
-                        <svg
-                          class="w-5 h-5 text-green-500"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2"
-                            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                          />
-                        </svg>
-                        <p class="text-[13px] font-medium text-green-700">
-                          {form.aadhaarFile.name}
-                        </p>
-                      </div>
-                      <p class="text-[11px] text-green-500 mt-1">
-                        Click to replace
-                      </p>
-                    {:else}
-                      <svg
-                        class="w-7 h-7 text-gray-300 mx-auto mb-2"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
+                <div class="grid grid-cols-2 gap-3">
+                  <!-- Aadhaar Front -->
+                  <div class="flex flex-col gap-1">
+                    <span class="text-[11px] text-gray-500 font-medium"
+                      >Front Side</span
+                    >
+                    <label for="aadhaarFrontInput" class="cursor-pointer">
+                      <div
+                        class="border-2 border-dashed rounded-xl p-4 text-center transition-all"
+                        class:border-green-400={form.aadhaarFront}
+                        class:bg-green-50={form.aadhaarFront}
+                        style={!form.aadhaarFront && errors.aadhaarFront
+                          ? "border-color:#fca5a5;background:#fef2f2"
+                          : !form.aadhaarFront
+                            ? "border-color:#e5e7eb;background:#f9fafb"
+                            : ""}
                       >
-                        <path
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                          stroke-width="1.5"
-                          d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-                        />
-                      </svg>
-                      <p class="text-[13px] font-medium text-gray-600">
-                        Click to upload Aadhaar Card
-                      </p>
-                      <p class="text-[11px] text-gray-400 mt-1">
-                        JPG, PNG, PDF · Max 5MB
-                      </p>
-                    {/if}
+                        {#if form.aadhaarFront}
+                          <svg
+                            class="w-5 h-5 text-green-500 mx-auto mb-1"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="2"
+                              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                            />
+                          </svg>
+                          <p
+                            class="text-[11px] font-medium text-green-700 truncate px-1"
+                          >
+                            {form.aadhaarFront.name}
+                          </p>
+                          <p class="text-[10px] text-green-500 mt-0.5">
+                            Click to replace
+                          </p>
+                        {:else}
+                          <svg
+                            class="w-6 h-6 text-gray-300 mx-auto mb-1.5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="1.5"
+                              d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                            />
+                          </svg>
+                          <p class="text-[12px] font-medium text-gray-600">
+                            Upload Front
+                          </p>
+                          <p class="text-[10px] text-gray-400 mt-0.5">
+                            JPG, PNG, PDF · 5MB
+                          </p>
+                        {/if}
+                      </div>
+                    </label>
+                    <input
+                      type="file"
+                      id="aadhaarFrontInput"
+                      class="hidden"
+                      accept=".jpg,.jpeg,.png,.pdf"
+                      onchange={(e) => {
+                        form.aadhaarFront =
+                          (e.target as HTMLInputElement).files?.[0] ?? null;
+                      }}
+                    />
+                    {#if errors.aadhaarFront}<span class={errorClass}
+                        >{errors.aadhaarFront}</span
+                      >{/if}
                   </div>
-                </label>
-                <input
-                  type="file"
-                  id="aadhaarInput"
-                  class="hidden"
-                  accept=".jpg,.jpeg,.png,.pdf"
-                  onchange={(e) => {
-                    form.aadhaarFile =
-                      (e.target as HTMLInputElement).files?.[0] ?? null;
-                  }}
-                />
-                {#if errors.aadhaarFile}
-                  <span class={errorClass}>{errors.aadhaarFile}</span>
-                {/if}
+                  <!-- Aadhaar Back -->
+                  <div class="flex flex-col gap-1">
+                    <span class="text-[11px] text-gray-500 font-medium"
+                      >Back Side</span
+                    >
+                    <label for="aadhaarBackInput" class="cursor-pointer">
+                      <div
+                        class="border-2 border-dashed rounded-xl p-4 text-center transition-all"
+                        class:border-green-400={form.aadhaarBack}
+                        class:bg-green-50={form.aadhaarBack}
+                        style={!form.aadhaarBack && errors.aadhaarBack
+                          ? "border-color:#fca5a5;background:#fef2f2"
+                          : !form.aadhaarBack
+                            ? "border-color:#e5e7eb;background:#f9fafb"
+                            : ""}
+                      >
+                        {#if form.aadhaarBack}
+                          <svg
+                            class="w-5 h-5 text-green-500 mx-auto mb-1"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="2"
+                              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                            />
+                          </svg>
+                          <p
+                            class="text-[11px] font-medium text-green-700 truncate px-1"
+                          >
+                            {form.aadhaarBack.name}
+                          </p>
+                          <p class="text-[10px] text-green-500 mt-0.5">
+                            Click to replace
+                          </p>
+                        {:else}
+                          <svg
+                            class="w-6 h-6 text-gray-300 mx-auto mb-1.5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="1.5"
+                              d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                            />
+                          </svg>
+                          <p class="text-[12px] font-medium text-gray-600">
+                            Upload Back
+                          </p>
+                          <p class="text-[10px] text-gray-400 mt-0.5">
+                            JPG, PNG, PDF · 5MB
+                          </p>
+                        {/if}
+                      </div>
+                    </label>
+                    <input
+                      type="file"
+                      id="aadhaarBackInput"
+                      class="hidden"
+                      accept=".jpg,.jpeg,.png,.pdf"
+                      onchange={(e) => {
+                        form.aadhaarBack =
+                          (e.target as HTMLInputElement).files?.[0] ?? null;
+                      }}
+                    />
+                    {#if errors.aadhaarBack}<span class={errorClass}
+                        >{errors.aadhaarBack}</span
+                      >{/if}
+                  </div>
+                </div>
               </div>
 
               <!-- PAN Card -->
@@ -902,75 +1001,158 @@
                 <span class={labelTextClass}
                   >Driving License <span class="text-red-400">*</span></span
                 >
-                <label for="dlInput" class="cursor-pointer">
-                  <div
-                    class="border-2 border-dashed rounded-xl p-5 text-center transition-all"
-                    class:border-green-400={form.dlFile}
-                    class:bg-green-50={form.dlFile}
-                    style={!form.dlFile && errors.dlFile
-                      ? "border-color:#fca5a5;background:#fef2f2"
-                      : !form.dlFile
-                        ? "border-color:#e5e7eb;background:#f9fafb"
-                        : ""}
-                  >
-                    {#if form.dlFile}
-                      <div class="flex items-center justify-center gap-2">
-                        <svg
-                          class="w-5 h-5 text-green-500"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2"
-                            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                          />
-                        </svg>
-                        <p class="text-[13px] font-medium text-green-700">
-                          {form.dlFile.name}
-                        </p>
-                      </div>
-                      <p class="text-[11px] text-green-500 mt-1">
-                        Click to replace
-                      </p>
-                    {:else}
-                      <svg
-                        class="w-7 h-7 text-gray-300 mx-auto mb-2"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
+                <div class="grid grid-cols-2 gap-3">
+                  <!-- DL Front -->
+                  <div class="flex flex-col gap-1">
+                    <span class="text-[11px] text-gray-500 font-medium"
+                      >Front Side</span
+                    >
+                    <label for="dlFrontInput" class="cursor-pointer">
+                      <div
+                        class="border-2 border-dashed rounded-xl p-4 text-center transition-all"
+                        class:border-green-400={form.dlFront}
+                        class:bg-green-50={form.dlFront}
+                        style={!form.dlFront && errors.dlFront
+                          ? "border-color:#fca5a5;background:#fef2f2"
+                          : !form.dlFront
+                            ? "border-color:#e5e7eb;background:#f9fafb"
+                            : ""}
                       >
-                        <path
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                          stroke-width="1.5"
-                          d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-                        />
-                      </svg>
-                      <p class="text-[13px] font-medium text-gray-600">
-                        Click to upload Driving License
-                      </p>
-                      <p class="text-[11px] text-gray-400 mt-1">
-                        JPG, PNG, PDF · Max 5MB
-                      </p>
-                    {/if}
+                        {#if form.dlFront}
+                          <svg
+                            class="w-5 h-5 text-green-500 mx-auto mb-1"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="2"
+                              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                            />
+                          </svg>
+                          <p
+                            class="text-[11px] font-medium text-green-700 truncate px-1"
+                          >
+                            {form.dlFront.name}
+                          </p>
+                          <p class="text-[10px] text-green-500 mt-0.5">
+                            Click to replace
+                          </p>
+                        {:else}
+                          <svg
+                            class="w-6 h-6 text-gray-300 mx-auto mb-1.5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="1.5"
+                              d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                            />
+                          </svg>
+                          <p class="text-[12px] font-medium text-gray-600">
+                            Upload Front
+                          </p>
+                          <p class="text-[10px] text-gray-400 mt-0.5">
+                            JPG, PNG, PDF · 5MB
+                          </p>
+                        {/if}
+                      </div>
+                    </label>
+                    <input
+                      type="file"
+                      id="dlFrontInput"
+                      class="hidden"
+                      accept=".jpg,.jpeg,.png,.pdf"
+                      onchange={(e) => {
+                        form.dlFront =
+                          (e.target as HTMLInputElement).files?.[0] ?? null;
+                      }}
+                    />
+                    {#if errors.dlFront}<span class={errorClass}
+                        >{errors.dlFront}</span
+                      >{/if}
                   </div>
-                </label>
-                <input
-                  type="file"
-                  id="dlInput"
-                  class="hidden"
-                  accept=".jpg,.jpeg,.png,.pdf"
-                  onchange={(e) => {
-                    form.dlFile =
-                      (e.target as HTMLInputElement).files?.[0] ?? null;
-                  }}
-                />
-                {#if errors.dlFile}
-                  <span class={errorClass}>{errors.dlFile}</span>
-                {/if}
+                  <!-- DL Back -->
+                  <div class="flex flex-col gap-1">
+                    <span class="text-[11px] text-gray-500 font-medium"
+                      >Back Side</span
+                    >
+                    <label for="dlBackInput" class="cursor-pointer">
+                      <div
+                        class="border-2 border-dashed rounded-xl p-4 text-center transition-all"
+                        class:border-green-400={form.dlBack}
+                        class:bg-green-50={form.dlBack}
+                        style={!form.dlBack && errors.dlBack
+                          ? "border-color:#fca5a5;background:#fef2f2"
+                          : !form.dlBack
+                            ? "border-color:#e5e7eb;background:#f9fafb"
+                            : ""}
+                      >
+                        {#if form.dlBack}
+                          <svg
+                            class="w-5 h-5 text-green-500 mx-auto mb-1"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="2"
+                              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                            />
+                          </svg>
+                          <p
+                            class="text-[11px] font-medium text-green-700 truncate px-1"
+                          >
+                            {form.dlBack.name}
+                          </p>
+                          <p class="text-[10px] text-green-500 mt-0.5">
+                            Click to replace
+                          </p>
+                        {:else}
+                          <svg
+                            class="w-6 h-6 text-gray-300 mx-auto mb-1.5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="1.5"
+                              d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                            />
+                          </svg>
+                          <p class="text-[12px] font-medium text-gray-600">
+                            Upload Back
+                          </p>
+                          <p class="text-[10px] text-gray-400 mt-0.5">
+                            JPG, PNG, PDF · 5MB
+                          </p>
+                        {/if}
+                      </div>
+                    </label>
+                    <input
+                      type="file"
+                      id="dlBackInput"
+                      class="hidden"
+                      accept=".jpg,.jpeg,.png,.pdf"
+                      onchange={(e) => {
+                        form.dlBack =
+                          (e.target as HTMLInputElement).files?.[0] ?? null;
+                      }}
+                    />
+                    {#if errors.dlBack}<span class={errorClass}
+                        >{errors.dlBack}</span
+                      >{/if}
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -1038,6 +1220,9 @@
                       el.value = el.value.replace(/\D/g, "");
                       form.accountNumber = el.value;
                     }}
+                    onpaste={(e) => e.preventDefault()}
+                    ondrop={(e) => e.preventDefault()}
+                    autocomplete="off"
                   />
                   {#if errors.accountNumber}
                     <span class={errorClass}>{errors.accountNumber}</span>
@@ -1045,7 +1230,7 @@
                 </label>
                 <label class="flex flex-col gap-1.5">
                   <span class={labelTextClass}
-                    >Confirm Account Number <span class="text-red-400">*</span
+                    >Confirm Account Number<span class="text-red-400">*</span
                     ></span
                   >
                   <input
@@ -1062,6 +1247,8 @@
                       form.confirmAccountNumber = el.value;
                     }}
                     onpaste={(e) => e.preventDefault()}
+                    ondrop={(e) => e.preventDefault()}
+                    autocomplete="off"
                   />
                   {#if errors.confirmAccountNumber}
                     <span class={errorClass}>{errors.confirmAccountNumber}</span
@@ -1272,7 +1459,7 @@
                   >
                 </div>
                 <div class="p-4 space-y-2">
-                  {#each [{ label: "Aadhaar Card", file: form.aadhaarFile }, { label: "PAN Card", file: form.panFile }, { label: "Driving License", file: form.dlFile }] as doc}
+                  {#each [{ label: "Aadhaar Card (Front)", file: form.aadhaarFront }, { label: "Aadhaar Card (Back)", file: form.aadhaarBack }, { label: "PAN Card", file: form.panFile }, { label: "Driving License (Front)", file: form.dlFront }, { label: "Driving License (Back)", file: form.dlBack }] as doc}
                     <div class="flex items-center gap-2.5">
                       <svg
                         class="w-4 h-4 flex-shrink-0 {doc.file

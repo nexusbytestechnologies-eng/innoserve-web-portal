@@ -14,9 +14,11 @@ export interface EngineerProfile {
   addressPincode: string | null;
   assignedState: string | null;
   profilePhotoUrl: string | null;
-  aadhaarUrl: string | null;
+  aadhaarFrontUrl: string | null;
+  aadhaarBackUrl: string | null;
   panCardUrl: string | null;
-  dlUrl: string | null;
+  dlFrontUrl: string | null;
+  dlBackUrl: string | null;
   documentsStatus: string;
   bankAccountNumber: string | null;
   ifscCode: string | null;
@@ -34,7 +36,7 @@ const FETCH_ENGINEER_PROFILES = `
       userName userEmail userPhone
       addressState addressCity addressPincode assignedState
       documentsStatus profilePhotoUrl
-      aadhaarUrl panCardUrl dlUrl cancelChequeUrl
+      aadhaarFrontUrl aadhaarBackUrl panCardUrl dlFrontUrl dlBackUrl cancelChequeUrl
       bankAccountNumber ifscCode accountHolderName createdAt
     }
   }

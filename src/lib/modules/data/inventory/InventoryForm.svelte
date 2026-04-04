@@ -35,8 +35,14 @@
     errors = {};
     if (!form.name.trim()) errors.name = "Item name is required";
     if (!form.sku.trim()) errors.sku = "SKU is required";
-    if (!form.quantity.trim() || isNaN(Number(form.quantity)) || Number(form.quantity) < 0)
-      errors.quantity = "Enter a valid quantity";
+    else if (!/^[A-Za-z0-9\-_]+$/.test(form.sku.trim()))
+      errors.sku =
+        "SKU must contain only letters, numbers, hyphens or underscores";
+    const qty = form.quantity.trim();
+    if (!qty) errors.quantity = "Quantity is required";
+    else if (!/^\d+$/.test(qty))
+      errors.quantity = "Quantity must be a whole number";
+    else if (Number(qty) < 0) errors.quantity = "Quantity cannot be negative";
     if (!form.location.trim()) errors.location = "Location is required";
     return Object.keys(errors).length === 0;
   }
@@ -50,7 +56,8 @@
   const fieldClass =
     "px-3.5 py-2.5 border border-gray-200 rounded-lg text-[13px] text-gray-700 outline-none focus:border-[#0B182A] transition-colors w-full bg-white";
   const labelClass = "flex flex-col gap-1.5";
-  const labelTextClass = "text-[11px] font-semibold text-gray-500 uppercase tracking-wide";
+  const labelTextClass =
+    "text-[11px] font-semibold text-gray-500 uppercase tracking-wide";
   const errorClass = "text-[11px] text-red-500 mt-0.5";
 </script>
 
@@ -71,13 +78,17 @@
     onkeydown={(e) => e.stopPropagation()}
   >
     <!-- Header -->
-    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
+    <div
+      class="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0"
+    >
       <div>
         <h2 class="text-[16px] font-semibold text-[#0B182A]">
           {mode === "add" ? "Add Inventory Item" : "Edit Inventory Item"}
         </h2>
         <p class="text-[12px] text-gray-400 mt-0.5">
-          {mode === "add" ? "Add a new item to the inventory" : "Update the item details below"}
+          {mode === "add"
+            ? "Add a new item to the inventory"
+            : "Update the item details below"}
         </p>
       </div>
       <button
@@ -85,21 +96,42 @@
         class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600"
         aria-label="Close"
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <line x1="18" y1="6" x2="6" y2="18" /><line
+            x1="6"
+            y1="6"
+            x2="18"
+            y2="18"
+          />
         </svg>
       </button>
     </div>
 
     <!-- Body -->
-    <form class="px-6 py-5 flex flex-col gap-4 overflow-y-auto" onsubmit={handleSubmit}>
+    <form
+      class="px-6 py-5 flex flex-col gap-4 overflow-y-auto"
+      onsubmit={handleSubmit}
+    >
       <!-- Item Name -->
       <label class={labelClass}>
-        <span class={labelTextClass}>Item Name <span class="text-red-400">*</span></span>
+        <span class={labelTextClass}
+          >Item Name <span class="text-red-400">*</span></span
+        >
         <input
           type="text"
           placeholder="e.g. Router"
-          class={fieldClass}
+          class="{fieldClass} {errors.name
+            ? 'border-red-400 focus:border-red-400'
+            : ''}"
           bind:value={form.name}
         />
         {#if errors.name}<span class={errorClass}>{errors.name}</span>{/if}
@@ -108,38 +140,59 @@
       <!-- Row: SKU + Quantity -->
       <div class="grid grid-cols-2 gap-4">
         <label class={labelClass}>
-          <span class={labelTextClass}>SKU <span class="text-red-400">*</span></span>
+          <span class={labelTextClass}
+            >SKU <span class="text-red-400">*</span></span
+          >
           <input
             type="text"
             placeholder="e.g. SKU-001"
-            class={fieldClass}
+            class="{fieldClass} {errors.sku
+              ? 'border-red-400 focus:border-red-400'
+              : ''}"
             bind:value={form.sku}
           />
           {#if errors.sku}<span class={errorClass}>{errors.sku}</span>{/if}
         </label>
         <label class={labelClass}>
-          <span class={labelTextClass}>Quantity <span class="text-red-400">*</span></span>
+          <span class={labelTextClass}
+            >Quantity <span class="text-red-400">*</span></span
+          >
           <input
-            type="number"
+            type="text"
+            inputmode="numeric"
             min="0"
+            step="1"
             placeholder="0"
-            class={fieldClass}
+            class="{fieldClass} {errors.quantity
+              ? 'border-red-400 focus:border-red-400'
+              : ''}"
             bind:value={form.quantity}
+            oninput={(e) => {
+              const el = e.target as HTMLInputElement;
+              el.value = el.value.replace(/\D/g, "");
+              form.quantity = el.value;
+            }}
           />
-          {#if errors.quantity}<span class={errorClass}>{errors.quantity}</span>{/if}
+          {#if errors.quantity}<span class={errorClass}>{errors.quantity}</span
+            >{/if}
         </label>
       </div>
 
       <!-- Location -->
       <label class={labelClass}>
-        <span class={labelTextClass}>Location <span class="text-red-400">*</span></span>
+        <span class={labelTextClass}
+          >Location <span class="text-red-400">*</span></span
+        >
         <input
           type="text"
           placeholder="e.g. Kerala"
-          class={fieldClass}
+          class="{fieldClass} {errors.location
+            ? 'border-red-400 focus:border-red-400'
+            : ''}"
           bind:value={form.location}
         />
-        {#if errors.location}<span class={errorClass}>{errors.location}</span>{/if}
+        {#if errors.location}<span class={errorClass}>{errors.location}</span
+          >{/if}
       </label>
 
       <!-- Footer -->

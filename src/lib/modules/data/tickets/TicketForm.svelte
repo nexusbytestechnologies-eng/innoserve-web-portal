@@ -105,10 +105,14 @@
     errors = {};
     if (!form.projectId) errors.projectId = "Project is required";
     if (!form.categoryId) errors.categoryId = "Call type is required";
-    if (!form.issue.trim()) errors.issue = "Issue is required";
+    if (!form.issue.trim()) errors.issue = "Issue / title is required";
+    else if (form.issue.trim().length < 3) errors.issue = "Issue must be at least 3 characters";
     if (!form.sub.trim()) errors.sub = "Customer / Subscriber is required";
     if (!form.place.trim()) errors.place = "Place / State is required";
-    if (!form.date.trim()) errors.date = "Date is required";
+    const date = form.date.trim();
+    if (!date) errors.date = "Date is required";
+    else if (!/^(0[1-9]|[12]\d|3[01])\/(0[1-9]|1[0-2])\/\d{4}$/.test(date))
+      errors.date = "Enter date in DD/MM/YYYY format";
     return Object.keys(errors).length === 0;
   }
 
@@ -227,14 +231,18 @@
       <!-- Issue -->
       <label class={labelClass}>
         <span class={labelTextClass}>Issue / Title <span class="text-red-400">*</span></span>
-        <input type="text" placeholder="e.g. Database Error" class={fieldClass} bind:value={form.issue} />
+        <input type="text" placeholder="e.g. Database Error"
+          class="{fieldClass} {errors.issue ? 'border-red-400 focus:border-red-400' : ''}"
+          bind:value={form.issue} />
         {#if errors.issue}<span class={errorClass}>{errors.issue}</span>{/if}
       </label>
 
       <!-- Customer / Sub -->
       <label class={labelClass}>
         <span class={labelTextClass}>Customer / Subscriber <span class="text-red-400">*</span></span>
-        <input type="text" placeholder="e.g. SBI Bank" class={fieldClass} bind:value={form.sub} />
+        <input type="text" placeholder="e.g. SBI Bank"
+          class="{fieldClass} {errors.sub ? 'border-red-400 focus:border-red-400' : ''}"
+          bind:value={form.sub} />
         {#if errors.sub}<span class={errorClass}>{errors.sub}</span>{/if}
       </label>
 
@@ -269,7 +277,9 @@
         </label>
         <label class={labelClass}>
           <span class={labelTextClass}>Date <span class="text-red-400">*</span></span>
-          <input type="text" placeholder="DD/MM/YYYY" class={fieldClass} bind:value={form.date} />
+          <input type="text" placeholder="DD/MM/YYYY" maxlength="10"
+            class="{fieldClass} {errors.date ? 'border-red-400 focus:border-red-400' : ''}"
+            bind:value={form.date} />
           {#if errors.date}<span class={errorClass}>{errors.date}</span>{/if}
         </label>
       </div>
@@ -277,7 +287,9 @@
       <!-- Place -->
       <label class={labelClass}>
         <span class={labelTextClass}>Place / State <span class="text-red-400">*</span></span>
-        <input type="text" placeholder="e.g. Kerala" class={fieldClass} bind:value={form.place} />
+        <input type="text" placeholder="e.g. Kerala"
+          class="{fieldClass} {errors.place ? 'border-red-400 focus:border-red-400' : ''}"
+          bind:value={form.place} />
         {#if errors.place}<span class={errorClass}>{errors.place}</span>{/if}
       </label>
 

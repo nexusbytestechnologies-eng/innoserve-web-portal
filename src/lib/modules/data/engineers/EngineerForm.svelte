@@ -2,6 +2,16 @@
   import { untrack } from "svelte";
   import type { EngineerProfile } from "./queries";
 
+  const INDIAN_STATES = [
+    "Andhra Pradesh","Arunachal Pradesh","Assam","Bihar","Chhattisgarh",
+    "Goa","Gujarat","Haryana","Himachal Pradesh","Jharkhand","Karnataka",
+    "Kerala","Madhya Pradesh","Maharashtra","Manipur","Meghalaya","Mizoram",
+    "Nagaland","Odisha","Punjab","Rajasthan","Sikkim","Tamil Nadu","Telangana",
+    "Tripura","Uttar Pradesh","Uttarakhand","West Bengal","Delhi (NCT)",
+    "Chandigarh","Puducherry","Ladakh","Jammu & Kashmir","Lakshadweep",
+    "Dadra & Nagar Haveli and Daman & Diu","Andaman & Nicobar Islands",
+  ];
+
   let {
     data = null,
     onSave,
@@ -28,7 +38,43 @@
 
   function validate() {
     errors = {};
-    if (!form.userName.trim()) errors.userName = "Full name is required";
+
+    // Full name: required, letters/spaces/dots/hyphens/apostrophes, 2–60 chars
+    const name = form.userName.trim();
+    if (!name) errors.userName = "Full name is required";
+    else if (!/^[A-Za-z\s.\-']+$/.test(name)) errors.userName = "Name must contain only letters";
+    else if (name.length < 2 || name.length > 60) errors.userName = "Name must be between 2 and 60 characters";
+
+    // Phone: if provided, 10-digit Indian mobile (starts 6–9)
+    const phone = form.userPhone.trim();
+    if (phone && !/^[6-9]\d{9}$/.test(phone))
+      errors.userPhone = "Enter a valid 10-digit mobile number starting with 6–9";
+
+    // City: if provided, letters/spaces/dots/hyphens only
+    const city = form.addressCity.trim();
+    if (city && !/^[A-Za-z\s.\-]+$/.test(city))
+      errors.addressCity = "City must contain only letters";
+
+    // Pincode: if provided, 6 digits, no leading zero
+    const pin = form.addressPincode.trim();
+    if (pin && !/^[1-9]\d{5}$/.test(pin))
+      errors.addressPincode = "Enter a valid 6-digit pincode";
+
+    // Account holder name: if provided, letters only
+    const holderName = form.accountHolderName.trim();
+    if (holderName && !/^[A-Za-z\s.\-']+$/.test(holderName))
+      errors.accountHolderName = "Name must contain only letters";
+
+    // Bank account number: if provided, 9–18 digits
+    const acc = form.bankAccountNumber.trim();
+    if (acc && !/^\d{9,18}$/.test(acc))
+      errors.bankAccountNumber = "Enter a valid account number (9–18 digits)";
+
+    // IFSC: if provided, 4 letters + 0 + 6 alphanumeric
+    const ifsc = form.ifscCode.trim().toUpperCase();
+    if (ifsc && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc))
+      errors.ifscCode = "Enter a valid IFSC code (e.g. SBIN0001234)";
+
     return Object.keys(errors).length === 0;
   }
 
@@ -85,12 +131,17 @@
       <div class="grid grid-cols-2 gap-4">
         <label class="{labelClass} col-span-2">
           <span class={labelTextClass}>Full Name <span class="text-red-400">*</span></span>
-          <input type="text" placeholder="e.g. Rajesh Kumar" class={fieldClass} bind:value={form.userName} />
+          <input type="text" placeholder="e.g. Rajesh Kumar"
+            class="{fieldClass} {errors.userName ? 'border-red-400 focus:border-red-400' : ''}"
+            bind:value={form.userName} />
           {#if errors.userName}<span class={errorClass}>{errors.userName}</span>{/if}
         </label>
         <label class={labelClass}>
           <span class={labelTextClass}>Phone</span>
-          <input type="tel" placeholder="e.g. 9876543210" class={fieldClass} bind:value={form.userPhone} />
+          <input type="tel" placeholder="e.g. 9876543210" maxlength="10"
+            class="{fieldClass} {errors.userPhone ? 'border-red-400 focus:border-red-400' : ''}"
+            bind:value={form.userPhone} />
+          {#if errors.userPhone}<span class={errorClass}>{errors.userPhone}</span>{/if}
         </label>
       </div>
 
@@ -99,22 +150,36 @@
       <div class="grid grid-cols-2 gap-4">
         <label class={labelClass}>
           <span class={labelTextClass}>State</span>
-          <input type="text" placeholder="e.g. Maharashtra" class={fieldClass} bind:value={form.addressState}
-            oninput={(e) => { const el = e.target as HTMLInputElement; el.value = el.value.replace(/[^A-Za-z\s.\-']/g, ""); form.addressState = el.value; }} />
+          <select class={fieldClass} bind:value={form.addressState}>
+            <option value="">— Select State —</option>
+            {#each INDIAN_STATES as s}
+              <option value={s}>{s}</option>
+            {/each}
+          </select>
         </label>
         <label class={labelClass}>
           <span class={labelTextClass}>City</span>
-          <input type="text" placeholder="e.g. Mumbai" class={fieldClass} bind:value={form.addressCity}
+          <input type="text" placeholder="e.g. Mumbai"
+            class="{fieldClass} {errors.addressCity ? 'border-red-400 focus:border-red-400' : ''}"
+            bind:value={form.addressCity}
             oninput={(e) => { const el = e.target as HTMLInputElement; el.value = el.value.replace(/[^A-Za-z\s.\-']/g, ""); form.addressCity = el.value; }} />
+          {#if errors.addressCity}<span class={errorClass}>{errors.addressCity}</span>{/if}
         </label>
         <label class={labelClass}>
           <span class={labelTextClass}>Pincode</span>
-          <input type="text" placeholder="e.g. 400001" class={fieldClass} bind:value={form.addressPincode} />
+          <input type="text" placeholder="e.g. 400001" maxlength="6"
+            class="{fieldClass} {errors.addressPincode ? 'border-red-400 focus:border-red-400' : ''}"
+            bind:value={form.addressPincode} />
+          {#if errors.addressPincode}<span class={errorClass}>{errors.addressPincode}</span>{/if}
         </label>
         <label class={labelClass}>
           <span class={labelTextClass}>Assigned State</span>
-          <input type="text" placeholder="e.g. Maharashtra" class={fieldClass} bind:value={form.assignedState}
-            oninput={(e) => { const el = e.target as HTMLInputElement; el.value = el.value.replace(/[^A-Za-z\s.\-']/g, ""); form.assignedState = el.value; }} />
+          <select class={fieldClass} bind:value={form.assignedState}>
+            <option value="">— Select State —</option>
+            {#each INDIAN_STATES as s}
+              <option value={s}>{s}</option>
+            {/each}
+          </select>
         </label>
       </div>
 
@@ -123,15 +188,25 @@
       <div class="grid grid-cols-2 gap-4">
         <label class="{labelClass} col-span-2">
           <span class={labelTextClass}>Account Holder Name</span>
-          <input type="text" placeholder="e.g. Rajesh Kumar" class={fieldClass} bind:value={form.accountHolderName} />
+          <input type="text" placeholder="e.g. Rajesh Kumar"
+            class="{fieldClass} {errors.accountHolderName ? 'border-red-400 focus:border-red-400' : ''}"
+            bind:value={form.accountHolderName} />
+          {#if errors.accountHolderName}<span class={errorClass}>{errors.accountHolderName}</span>{/if}
         </label>
         <label class={labelClass}>
           <span class={labelTextClass}>Account Number</span>
-          <input type="text" placeholder="e.g. 1234567890" class={fieldClass} bind:value={form.bankAccountNumber} />
+          <input type="text" placeholder="e.g. 1234567890" maxlength="18"
+            class="{fieldClass} {errors.bankAccountNumber ? 'border-red-400 focus:border-red-400' : ''}"
+            bind:value={form.bankAccountNumber} />
+          {#if errors.bankAccountNumber}<span class={errorClass}>{errors.bankAccountNumber}</span>{/if}
         </label>
         <label class={labelClass}>
           <span class={labelTextClass}>IFSC Code</span>
-          <input type="text" placeholder="e.g. SBIN0001234" class={fieldClass} bind:value={form.ifscCode} />
+          <input type="text" placeholder="e.g. SBIN0001234" maxlength="11"
+            class="{fieldClass} {errors.ifscCode ? 'border-red-400 focus:border-red-400' : ''}"
+            bind:value={form.ifscCode}
+            oninput={(e) => { const el = e.target as HTMLInputElement; el.value = el.value.toUpperCase(); form.ifscCode = el.value; }} />
+          {#if errors.ifscCode}<span class={errorClass}>{errors.ifscCode}</span>{/if}
         </label>
       </div>
 

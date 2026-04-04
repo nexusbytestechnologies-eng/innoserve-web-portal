@@ -2,6 +2,16 @@
   import * as Icons from "$lib/icons";
   import { type Customer } from "./queries";
 
+  const INDIAN_STATES = [
+    "Andhra Pradesh","Arunachal Pradesh","Assam","Bihar","Chhattisgarh",
+    "Goa","Gujarat","Haryana","Himachal Pradesh","Jharkhand","Karnataka",
+    "Kerala","Madhya Pradesh","Maharashtra","Manipur","Meghalaya","Mizoram",
+    "Nagaland","Odisha","Punjab","Rajasthan","Sikkim","Tamil Nadu","Telangana",
+    "Tripura","Uttar Pradesh","Uttarakhand","West Bengal","Delhi (NCT)",
+    "Chandigarh","Puducherry","Ladakh","Jammu & Kashmir","Lakshadweep",
+    "Dadra & Nagar Haveli and Daman & Diu","Andaman & Nicobar Islands",
+  ];
+
   let {
     mode = "add",
     data = null,
@@ -32,12 +42,51 @@
 
   function validate() {
     errors = {};
-    if (!form.company.trim()) errors.company = "Company name is required";
-    if (!form.contact.trim()) errors.contact = "Contact person is required";
-    if (!form.phone.trim()) errors.phone = "Phone number is required";
-    else if (!/^\+?\d[\d\s\-]{7,}$/.test(form.phone))
-      errors.phone = "Enter a valid phone number";
-    if (!form.addressState.trim()) errors.addressState = "State is required";
+
+    // Company name: required, no digits
+    const company = form.company.trim();
+    if (!company) errors.company = "Company name is required";
+    else if (/\d/.test(company)) errors.company = "Company name must not contain numbers";
+
+    // Contact person: required, letters/spaces/dots/hyphens/apostrophes only
+    const contact = form.contact.trim();
+    if (!contact) errors.contact = "Contact person name is required";
+    else if (!/^[A-Za-z\s.\-']+$/.test(contact)) errors.contact = "Name must contain only letters";
+
+    // Primary email: if provided, valid format
+    if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim()))
+      errors.email = "Enter a valid email address";
+
+    // Primary phone: required, 10-digit Indian mobile (starts 6–9)
+    const phone = form.phone.trim();
+    if (!phone) errors.phone = "Phone number is required";
+    else if (!/^[6-9]\d{9}$/.test(phone)) errors.phone = "Enter a valid 10-digit mobile number starting with 6–9";
+
+    // State required
+    if (!form.addressState) errors.addressState = "State is required";
+
+    // City: if provided, letters/spaces/dots/hyphens only
+    const city = form.addressCity.trim();
+    if (city && !/^[A-Za-z\s.\-]+$/.test(city)) errors.addressCity = "City must contain only letters";
+
+    // Pincode: if provided, exactly 6 digits, no leading zero
+    const pin = form.addressPincode.trim();
+    if (pin && !/^[1-9]\d{5}$/.test(pin)) errors.addressPincode = "Enter a valid 6-digit pincode";
+
+    // Secondary contact name: if provided, letters only
+    const secName = form.secondaryContactName.trim();
+    if (secName && !/^[A-Za-z\s.\-']+$/.test(secName))
+      errors.secondaryContactName = "Name must contain only letters";
+
+    // Secondary email: if provided, valid format
+    if (form.secondaryContactEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.secondaryContactEmail.trim()))
+      errors.secondaryContactEmail = "Enter a valid email address";
+
+    // Secondary phone: if provided, 10-digit Indian mobile
+    const secPhone = form.secondaryContactPhone.trim();
+    if (secPhone && !/^[6-9]\d{9}$/.test(secPhone))
+      errors.secondaryContactPhone = "Enter a valid 10-digit mobile number starting with 6–9";
+
     return Object.keys(errors).length === 0;
   }
 
@@ -169,22 +218,26 @@
           <input
             type="email"
             placeholder="e.g. arun@hdfc.com"
-            class={fieldClass}
+            class="{fieldClass} {errors.email
+              ? 'border-red-400 focus:border-red-400 focus:ring-red-400/10'
+              : ''}"
             bind:value={form.email}
             disabled={saving}
           />
+          {#if errors.email}<span class={errorClass}>{errors.email}</span>{/if}
         </label>
         <label class={labelClass}>
           <span class={labelTextClass}
             >Phone <span class="text-red-400">*</span></span
           >
           <input
-            type="text"
-            placeholder="+91 9999999999"
+            type="tel"
+            placeholder="e.g. 9876543210"
             class="{fieldClass} {errors.phone
               ? 'border-red-400 focus:border-red-400 focus:ring-red-400/10'
               : ''}"
             bind:value={form.phone}
+            maxlength="10"
             disabled={saving}
           />
           {#if errors.phone}<span class={errorClass}>{errors.phone}</span>{/if}
@@ -204,15 +257,18 @@
           <span class={labelTextClass}
             >State <span class="text-red-400">*</span></span
           >
-          <input
-            type="text"
-            placeholder="e.g. Kerala"
+          <select
             class="{fieldClass} {errors.addressState
               ? 'border-red-400 focus:border-red-400 focus:ring-red-400/10'
               : ''}"
             bind:value={form.addressState}
             disabled={saving}
-          />
+          >
+            <option value="">— Select State —</option>
+            {#each INDIAN_STATES as s}
+              <option value={s}>{s}</option>
+            {/each}
+          </select>
           {#if errors.addressState}<span class={errorClass}
               >{errors.addressState}</span
             >{/if}
@@ -222,10 +278,13 @@
           <input
             type="text"
             placeholder="e.g. Kochi"
-            class={fieldClass}
+            class="{fieldClass} {errors.addressCity
+              ? 'border-red-400 focus:border-red-400 focus:ring-red-400/10'
+              : ''}"
             bind:value={form.addressCity}
             disabled={saving}
           />
+          {#if errors.addressCity}<span class={errorClass}>{errors.addressCity}</span>{/if}
         </label>
       </div>
 
@@ -235,10 +294,14 @@
         <input
           type="text"
           placeholder="e.g. 682001"
-          class={fieldClass}
+          class="{fieldClass} {errors.addressPincode
+            ? 'border-red-400 focus:border-red-400 focus:ring-red-400/10'
+            : ''}"
           bind:value={form.addressPincode}
+          maxlength="6"
           disabled={saving}
         />
+        {#if errors.addressPincode}<span class={errorClass}>{errors.addressPincode}</span>{/if}
       </label>
 
       <!-- Section: Secondary Contact -->
@@ -254,10 +317,13 @@
         <input
           type="text"
           placeholder="e.g. Priya Nair"
-          class={fieldClass}
+          class="{fieldClass} {errors.secondaryContactName
+            ? 'border-red-400 focus:border-red-400 focus:ring-red-400/10'
+            : ''}"
           bind:value={form.secondaryContactName}
           disabled={saving}
         />
+        {#if errors.secondaryContactName}<span class={errorClass}>{errors.secondaryContactName}</span>{/if}
       </label>
 
       <div class="grid grid-cols-2 gap-4">
@@ -266,20 +332,27 @@
           <input
             type="email"
             placeholder="e.g. priya@hdfc.com"
-            class={fieldClass}
+            class="{fieldClass} {errors.secondaryContactEmail
+              ? 'border-red-400 focus:border-red-400 focus:ring-red-400/10'
+              : ''}"
             bind:value={form.secondaryContactEmail}
             disabled={saving}
           />
+          {#if errors.secondaryContactEmail}<span class={errorClass}>{errors.secondaryContactEmail}</span>{/if}
         </label>
         <label class={labelClass}>
           <span class={labelTextClass}>Phone</span>
           <input
             type="text"
-            placeholder="+91 9999999999"
-            class={fieldClass}
+            placeholder="e.g. 9876543210"
+            class="{fieldClass} {errors.secondaryContactPhone
+              ? 'border-red-400 focus:border-red-400 focus:ring-red-400/10'
+              : ''}"
             bind:value={form.secondaryContactPhone}
+            maxlength="10"
             disabled={saving}
           />
+          {#if errors.secondaryContactPhone}<span class={errorClass}>{errors.secondaryContactPhone}</span>{/if}
         </label>
       </div>
 
