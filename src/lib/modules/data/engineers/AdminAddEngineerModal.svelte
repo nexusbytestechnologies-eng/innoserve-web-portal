@@ -347,6 +347,7 @@
                 type="text" bind:value={form.city}
                 class="{inp} {errors.city ? 'border-red-300' : ''}"
                 placeholder="e.g. Mumbai"
+                oninput={(e) => { const el = e.target as HTMLInputElement; el.value = el.value.replace(/[^A-Za-z\s.\-']/g, ""); form.city = el.value; }}
               />
               {#if errors.city}<span class={err}>{errors.city}</span>{/if}
             </label>

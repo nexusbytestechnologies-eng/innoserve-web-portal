@@ -44,9 +44,22 @@ const FETCH_ROLES = `
   }
 `;
 
+const FETCH_USER_ROLES = `
+  query {
+    userRoles {
+      userId roleId author createdAt
+    }
+  }
+`;
+
 export async function fetchRoles(): Promise<Role[]> {
   const data = await gqlRequest<{ roles: Role[] }>(FETCH_ROLES);
   return data.roles;
+}
+
+export async function fetchUserRoles(): Promise<UserRole[]> {
+  const data = await gqlRequest<{ userRoles: UserRole[] }>(FETCH_USER_ROLES);
+  return data.userRoles;
 }
 
 // ── Mutations ──────────────────────────────────────────────────────────────

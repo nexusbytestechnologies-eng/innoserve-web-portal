@@ -16,6 +16,7 @@ export interface User {
 	email: string;
 	name: string;
 	role: Role;
+	avatarFileId?: number | null;
 }
 
 export interface AuthState {

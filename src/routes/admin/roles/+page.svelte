@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { toast } from 'svelte-sonner';
   import { fetchEngineerProfiles, type EngineerProfile } from '$lib/modules/data/engineers/queries';
-  import { fetchRoles, createUserRole, type Role as RoleRecord } from '$lib/api/roles';
+  import { fetchRoles, fetchUserRoles, createUserRole, type Role as RoleRecord, type UserRole } from '$lib/api/roles';
   import { ROLE_LABELS, type Role as RoleName } from '$lib/config/roles';
   import Pagination from '$lib/components/Pagination.svelte';
 
@@ -10,6 +10,7 @@
 
   let engineers = $state<EngineerProfile[]>([]);
   let roles = $state<RoleRecord[]>([]);
+  let userRoles = $state<UserRole[]>([]);
   let loading = $state(true);
   let search = $state('');
 
@@ -45,9 +46,18 @@
   const totalPages        = $derived(Math.max(1, Math.ceil(filteredEngineers.length / PAGE_SIZE)));
   const pagedEngineers    = $derived(filteredEngineers.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE));
 
+  // userId → most-recently-assigned role label
+  const userRoleMap = $derived(
+    userRoles.reduce<Record<string, string>>((acc, ur) => {
+      const role = roles.find((r) => r.id === ur.roleId);
+      if (role) acc[ur.userId] = ROLE_LABELS[role.name as RoleName] ?? role.name;
+      return acc;
+    }, {}),
+  );
+
   onMount(async () => {
     try {
-      [engineers, roles] = await Promise.all([fetchEngineerProfiles(), fetchRoles()]);
+      [engineers, roles, userRoles] = await Promise.all([fetchEngineerProfiles(), fetchRoles(), fetchUserRoles()]);
     } catch (err) {
       toast.error('Failed to load data');
     } finally {
@@ -125,16 +135,16 @@
       <table class="w-full text-sm border-collapse">
         <thead>
           <tr class="border-b border-gray-100">
-            {#each ['ENGINEER', 'ID', 'EMAIL', 'LOCATION', 'DOC STATUS', 'ACTION'] as col}
+            {#each ['ENGINEER', 'ID', 'EMAIL', 'LOCATION', 'DOC STATUS', 'ROLE', 'ACTION'] as col}
               <th class="text-left text-[11px] font-semibold text-gray-400 tracking-wide py-3 px-3 whitespace-nowrap">{col}</th>
             {/each}
           </tr>
         </thead>
         <tbody>
           {#if loading}
-            <tr><td colspan="6" class="py-10 text-center text-[13px] text-gray-400">Loading…</td></tr>
+            <tr><td colspan="7" class="py-10 text-center text-[13px] text-gray-400">Loading…</td></tr>
           {:else if filteredEngineers.length === 0}
-            <tr><td colspan="6" class="py-10 text-center text-[13px] text-gray-400">No engineers found</td></tr>
+            <tr><td colspan="7" class="py-10 text-center text-[13px] text-gray-400">No engineers found</td></tr>
           {:else}
             {#each pagedEngineers as eng}
               <tr class="border-b border-gray-50 hover:bg-gray-50 transition-colors">
@@ -150,6 +160,15 @@
                   <span class="text-[11px] font-semibold px-2.5 py-1 rounded-full {docStatusStyle(eng.documentsStatus)}">
                     {eng.documentsStatus}
                   </span>
+                </td>
+                <td class="py-3 px-3">
+                  {#if eng.userId && userRoleMap[eng.userId]}
+                    <span class="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-blue-50 text-blue-600">
+                      {userRoleMap[eng.userId]}
+                    </span>
+                  {:else}
+                    <span class="text-[12px] text-gray-300">—</span>
+                  {/if}
                 </td>
                 <td class="py-3 px-3">
                   {#if eng.documentsStatus === 'approved' && eng.userId}

@@ -1,5 +1,5 @@
 import { invalidate } from '$lib/stores/query';
-import { restRequest } from '$lib/api/rest';
+import { restRequest, ApiError } from '$lib/api/rest';
 import type { Ticket } from '$lib/modules/data/tickets/queries';
 import type { TicketStatus } from '$lib/config/roles';
 import { uploadFile, fileUrl } from '$lib/api/upload';
@@ -62,7 +62,10 @@ export async function assignTicket(
 ): Promise<Ticket> {
   const result = await restRequest<Ticket>(`/api/tickets/${ticketId}/assign`, {
     method: 'PATCH',
-    body: JSON.stringify(data),
+    body: JSON.stringify({
+      ...(data.engineerId ? { assignedEngineerId: data.engineerId } : {}),
+      ...(data.statePlannerId ? { statePlannerId: data.statePlannerId } : {}),
+    }),
   });
   invalidate('tickets');
   return result;
@@ -72,12 +75,27 @@ export async function escalateTicket(
   ticketId: string,
   data: EscalateTicketInput,
 ): Promise<Ticket> {
-  const result = await restRequest<Ticket>(`/api/tickets/${ticketId}/escalate`, {
-    method: 'PATCH',
-    body: JSON.stringify(data),
-  });
-  invalidate('tickets');
-  return result;
+  const escalationLevel = data.level.toUpperCase();
+  if (!['L1', 'L2', 'L3'].includes(escalationLevel)) {
+    throw new Error('Invalid escalation level');
+  }
+  try {
+    const result = await restRequest<Ticket>(`/api/tickets/${ticketId}/escalate`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        escalationLevel,
+        remarks: data.reason,
+        ...(data.engineerId ? { engineerId: data.engineerId } : {}),
+      }),
+    });
+    invalidate('tickets');
+    return result;
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 400) {
+      throw new Error('Invalid escalation level');
+    }
+    throw err;
+  }
 }
 
 export async function validateTicket(

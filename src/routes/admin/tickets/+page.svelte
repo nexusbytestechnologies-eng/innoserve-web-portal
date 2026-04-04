@@ -89,19 +89,21 @@
   // ── Derived ───────────────────────────────────────────────────────────────
 
   let tickets = $derived(
-    allTickets.filter((t) => {
-      if (filterStatus && t.status !== filterStatus) return false;
-      if (filterPriority && t.priority !== filterPriority) return false;
-      if (search) {
-        const q = search.toLowerCase();
-        return (
-          t.title?.toLowerCase().includes(q) ||
-          t.ticketNumber?.toLowerCase().includes(q) ||
-          t.state?.toLowerCase().includes(q)
-        );
-      }
-      return true;
-    }),
+    allTickets
+      .filter((t) => {
+        if (filterStatus && t.status !== filterStatus) return false;
+        if (filterPriority && t.priority !== filterPriority) return false;
+        if (search) {
+          const q = search.toLowerCase();
+          return (
+            t.title?.toLowerCase().includes(q) ||
+            t.ticketNumber?.toLowerCase().includes(q) ||
+            t.state?.toLowerCase().includes(q)
+          );
+        }
+        return true;
+      })
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
   );
 
   let filteredProjects = $derived(
