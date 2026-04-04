@@ -29,6 +29,7 @@
 			{ label: 'Engineers',    href: '/admin/engineers',        icon: 'hardhat' },
 			{ label: 'Projects',     href: '/admin/projects',         icon: 'folder'  },
 			{ label: 'Tickets',      href: '/admin/tickets',          icon: 'ticket'  },
+			{ label: 'Inventory',    href: '/admin/inventory',        icon: 'cube'    },
 			{ label: 'Roles',        href: '/admin/roles',            icon: 'key'     },
 			{ label: 'Payout Rates', href: '/admin/payouts/rates',    icon: 'dollar'  },
 			{ label: 'Payout Log',   href: '/admin/payouts/log',      icon: 'chart'   }
@@ -53,9 +54,10 @@
 			{ label: 'Tickets',   href: '/customer/tickets', icon: 'ticket' }
 		],
 		noc: [
-			{ label: 'Dashboard',   href: '/noc',                 icon: 'home'   },
-			{ label: 'Tickets',     href: '/noc/tickets',         icon: 'ticket' },
-			{ label: 'Replacements', href: '/noc/replacements',   icon: 'cube'   }
+			{ label: 'Dashboard',    href: '/noc',                icon: 'home'   },
+			{ label: 'Tickets',      href: '/noc/tickets',        icon: 'ticket' },
+			{ label: 'Replacements', href: '/noc/replacements',   icon: 'cube'   },
+			{ label: 'Inventory',    href: '/noc/inventory',      icon: 'cube'   }
 		],
 		state_planner: [
 			{ label: 'Dashboard', href: '/planner',         icon: 'home' },

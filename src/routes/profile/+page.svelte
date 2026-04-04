@@ -1,11 +1,83 @@
 <script lang="ts">
   import { toast } from 'svelte-sonner';
   import { authStore } from '$lib/stores/auth';
+  import type { User } from '$lib/stores/auth';
   import { ApiError, restRequest } from '$lib/api/rest';
 
   // ── State ─────────────────────────────────────────────────────────────────
 
   const user = $derived($authStore.user);
+
+  // ── Edit Profile ──────────────────────────────────────────────────────────
+
+  let editName       = $state('');
+  let editEmail      = $state('');
+  let avatarFile     = $state<File | null>(null);
+  let avatarPreview  = $state<string | null>(null);
+  let profileErrors  = $state<Record<string, string>>({});
+  let profileSaving  = $state(false);
+
+  $effect(() => {
+    editName  = user?.name  ?? '';
+    editEmail = user?.email ?? '';
+  });
+
+  function onAvatarChange(e: Event) {
+    const input = e.currentTarget as HTMLInputElement;
+    const file  = input.files?.[0] ?? null;
+    avatarFile  = file;
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => { avatarPreview = reader.result as string; };
+      reader.readAsDataURL(file);
+    } else {
+      avatarPreview = null;
+    }
+  }
+
+  function validateProfile(): boolean {
+    profileErrors = {};
+    if (!editName.trim())  profileErrors.name  = 'Name is required';
+    if (!editEmail.trim()) profileErrors.email = 'Email is required';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editEmail))
+      profileErrors.email = 'Invalid email address';
+    return Object.keys(profileErrors).length === 0;
+  }
+
+  async function handleSaveProfile(e: Event) {
+    e.preventDefault();
+    if (!validateProfile()) return;
+    profileSaving = true;
+    try {
+      let body: FormData | string;
+      let headers: Record<string, string> | undefined;
+
+      if (avatarFile) {
+        const fd = new FormData();
+        fd.append('name',   editName.trim());
+        fd.append('email',  editEmail.trim());
+        fd.append('avatar', avatarFile);
+        body = fd;
+      } else {
+        body    = JSON.stringify({ name: editName.trim(), email: editEmail.trim() });
+        headers = { 'Content-Type': 'application/json' };
+      }
+
+      const updated = await restRequest<User>('/api/users/me', { method: 'PATCH', body, headers });
+      if (user) authStore.setUser({ ...user, ...updated });
+      avatarFile    = null;
+      avatarPreview = null;
+      toast.success('Profile updated');
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        profileErrors.email = 'Email already in use';
+      } else {
+        toast.error(`Failed: ${(err as Error).message}`);
+      }
+    } finally {
+      profileSaving = false;
+    }
+  }
 
   let currentPassword = $state('');
   let newPassword     = $state('');
@@ -91,21 +163,76 @@
 
 <div class="flex flex-col gap-5 max-w-2xl">
 
-  <!-- Profile info card -->
+  <!-- Edit Profile card -->
   <div class="bg-white rounded-2xl p-6 shadow">
-    <h2 class="text-[18px] font-semibold text-[#0B182A] mb-4">Profile</h2>
-    <div class="flex items-center gap-4">
-      <div class="w-14 h-14 rounded-full bg-[#E87D1F] flex items-center justify-center text-white text-[18px] font-bold shrink-0">
-        {user?.name?.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase() ?? '?'}
+    <h2 class="text-[18px] font-semibold text-[#0B182A] mb-1">Profile</h2>
+    <p class="text-[13px] text-gray-400 mb-6">Update your name, email, and avatar.</p>
+
+    <form onsubmit={handleSaveProfile} class="flex flex-col gap-4" novalidate>
+      <!-- Avatar -->
+      <div class="flex items-center gap-4">
+        <div class="relative shrink-0">
+          {#if avatarPreview}
+            <img src={avatarPreview} alt="Avatar preview" class="w-16 h-16 rounded-full object-cover" />
+          {:else}
+            <div class="w-16 h-16 rounded-full bg-[#E87D1F] flex items-center justify-center text-white text-[18px] font-bold">
+              {user?.name?.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase() ?? '?'}
+            </div>
+          {/if}
+          <label
+            for="avatar-upload"
+            class="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#0B182A] flex items-center justify-center cursor-pointer hover:bg-[#162536] transition-colors"
+            title="Change avatar"
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+          </label>
+          <input id="avatar-upload" type="file" accept="image/*" class="hidden" onchange={onAvatarChange} />
+        </div>
+        <div class="flex flex-col">
+          <p class="text-[13px] font-medium text-[#0B182A]">{user?.name ?? '—'}</p>
+          <p class="text-[12px] text-gray-400">{user?.email ?? '—'}</p>
+          <span class="inline-block mt-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#0B182A]/10 text-[#0B182A] w-fit">
+            {user?.role?.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) ?? '—'}
+          </span>
+        </div>
       </div>
-      <div>
-        <p class="text-[16px] font-semibold text-[#0B182A]">{user?.name ?? '—'}</p>
-        <p class="text-[13px] text-gray-400 mt-0.5">{user?.email ?? '—'}</p>
-        <span class="inline-block mt-1.5 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-[#0B182A]/10 text-[#0B182A]">
-          {user?.role?.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) ?? '—'}
-        </span>
+
+      <!-- Name -->
+      <div class="flex flex-col gap-1.5">
+        <label for="edit-name" class={labelTextClass}>Name</label>
+        <input
+          id="edit-name"
+          type="text"
+          placeholder="Your full name"
+          class={inputClass(!!profileErrors.name)}
+          bind:value={editName}
+        />
+        {#if profileErrors.name}<span class={errorClass}>{profileErrors.name}</span>{/if}
       </div>
-    </div>
+
+      <!-- Email -->
+      <div class="flex flex-col gap-1.5">
+        <label for="edit-email" class={labelTextClass}>Email</label>
+        <input
+          id="edit-email"
+          type="email"
+          placeholder="your@email.com"
+          class={inputClass(!!profileErrors.email)}
+          bind:value={editEmail}
+        />
+        {#if profileErrors.email}<span class={errorClass}>{profileErrors.email}</span>{/if}
+      </div>
+
+      <div class="flex justify-end pt-1">
+        <button
+          type="submit"
+          disabled={profileSaving}
+          class="px-6 py-2.5 text-[13px] font-semibold text-white bg-[#0B182A] hover:bg-[#162536] rounded-lg transition-colors disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed"
+        >
+          {profileSaving ? 'Saving…' : 'Save Changes'}
+        </button>
+      </div>
+    </form>
   </div>
 
   <!-- Change Password card -->

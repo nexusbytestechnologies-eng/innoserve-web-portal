@@ -52,8 +52,8 @@
       confirmLabel: "Approve",
       confirmClass: "bg-green-600 text-white hover:bg-green-700",
       action: async () => {
-        const updated = await updateEngineerDocumentsStatus({ id: eng.id, documentsStatus: "approved" });
-        engineers = engineers.map(e => e.id === updated.id ? { ...e, ...updated } : e);
+        await updateEngineerDocumentsStatus({ id: eng.id, documentsStatus: "approved" });
+        engineers = engineers.map(e => e.id === eng.id ? { ...e, documentsStatus: "approved" } : e);
         toast.success(`${eng.userName ?? eng.referenceId} approved — credentials sent`);
       },
     };
@@ -67,8 +67,8 @@
       confirmLabel: "Reject",
       confirmClass: "bg-red-500 text-white hover:bg-red-600",
       action: async () => {
-        const updated = await updateEngineerDocumentsStatus({ id: eng.id, documentsStatus: "rejected" });
-        engineers = engineers.map(e => e.id === updated.id ? { ...e, ...updated } : e);
+        await updateEngineerDocumentsStatus({ id: eng.id, documentsStatus: "rejected" });
+        engineers = engineers.map(e => e.id === eng.id ? { ...e, documentsStatus: "rejected" } : e);
         toast.success(`${eng.userName ?? eng.referenceId} rejected`);
       },
     };
@@ -106,9 +106,10 @@
 
   async function handleSave(form: Record<string, string>) {
     if (!editEngineer) return;
+    const targetId = editEngineer.id;
     try {
-      const updated = await updateEngineer({
-        id: editEngineer.id,
+      await updateEngineer({
+        id: targetId,
         userName:          form.userName          || undefined,
         userPhone:         form.userPhone         || undefined,
         addressState:      form.addressState      || undefined,
@@ -119,7 +120,17 @@
         ifscCode:          form.ifscCode          || undefined,
         accountHolderName: form.accountHolderName || undefined,
       });
-      engineers = engineers.map(e => e.id === updated.id ? { ...e, ...updated } : e);
+      const patch: Partial<EngineerProfile> = {};
+      if (form.userName)          patch.userName          = form.userName;
+      if (form.userPhone)         patch.userPhone         = form.userPhone;
+      if (form.addressState)      patch.addressState      = form.addressState;
+      if (form.addressCity)       patch.addressCity       = form.addressCity;
+      if (form.addressPincode)    patch.addressPincode    = form.addressPincode;
+      if (form.assignedState)     patch.assignedState     = form.assignedState;
+      if (form.bankAccountNumber) patch.bankAccountNumber = form.bankAccountNumber;
+      if (form.ifscCode)          patch.ifscCode          = form.ifscCode;
+      if (form.accountHolderName) patch.accountHolderName = form.accountHolderName;
+      engineers = engineers.map(e => e.id === targetId ? { ...e, ...patch } : e);
       toast.success("Engineer updated successfully");
     } catch (err) {
       toast.error(`Failed to update engineer: ${(err as Error).message}`);
