@@ -25,7 +25,7 @@
     type Project,
   } from "$lib/modules/data/projects/queries";
   import { ApiError, restRequest } from "$lib/api/rest";
-  import { queryVersion } from "$lib/stores/query";
+  import { queryVersion, invalidate } from "$lib/stores/query";
   import Pagination from "$lib/components/Pagination.svelte";
 
   const user = $derived($authStore.user);
@@ -273,6 +273,11 @@
       escalateErrors.reason = "Reason is required";
       return;
     }
+    const escalationLevel = escalateForm.level.toUpperCase();
+    if (!['L1', 'L2', 'L3'].includes(escalationLevel)) {
+      escalateErrors.level = 'Invalid escalation level';
+      return;
+    }
     escalating = true;
     try {
       const updated = await restRequest<Ticket>(
@@ -280,19 +285,24 @@
         {
           method: "PATCH",
           body: JSON.stringify({
-            level: escalateForm.level,
-            reason: escalateForm.reason.trim(),
-            engineerId: escalateForm.engineerId || undefined,
+            escalationLevel,
+            remarks: escalateForm.reason.trim(),
+            ...(escalateForm.engineerId ? { engineerId: escalateForm.engineerId } : {}),
           }),
         },
       );
       tickets = tickets.map((t) =>
         t.id === updated.id ? { ...t, ...updated } : t,
       );
-      toast.success(`Ticket escalated to ${escalateForm.level}`);
+      invalidate('tickets');
+      toast.success(`Ticket escalated to ${escalationLevel}`);
       escalateTarget = null;
     } catch (err) {
-      toast.error(`Failed: ${(err as Error).message}`);
+      if (err instanceof ApiError && err.status === 400) {
+        toast.error('Invalid escalation level');
+      } else {
+        toast.error(`Failed: ${(err as Error).message}`);
+      }
     } finally {
       escalating = false;
     }

@@ -99,11 +99,13 @@
       <div class="grid grid-cols-2 gap-4">
         <label class={labelClass}>
           <span class={labelTextClass}>State</span>
-          <input type="text" placeholder="e.g. Maharashtra" class={fieldClass} bind:value={form.addressState} />
+          <input type="text" placeholder="e.g. Maharashtra" class={fieldClass} bind:value={form.addressState}
+            oninput={(e) => { const el = e.target as HTMLInputElement; el.value = el.value.replace(/[^A-Za-z\s.\-']/g, ""); form.addressState = el.value; }} />
         </label>
         <label class={labelClass}>
           <span class={labelTextClass}>City</span>
-          <input type="text" placeholder="e.g. Mumbai" class={fieldClass} bind:value={form.addressCity} />
+          <input type="text" placeholder="e.g. Mumbai" class={fieldClass} bind:value={form.addressCity}
+            oninput={(e) => { const el = e.target as HTMLInputElement; el.value = el.value.replace(/[^A-Za-z\s.\-']/g, ""); form.addressCity = el.value; }} />
         </label>
         <label class={labelClass}>
           <span class={labelTextClass}>Pincode</span>
@@ -111,7 +113,8 @@
         </label>
         <label class={labelClass}>
           <span class={labelTextClass}>Assigned State</span>
-          <input type="text" placeholder="e.g. Maharashtra" class={fieldClass} bind:value={form.assignedState} />
+          <input type="text" placeholder="e.g. Maharashtra" class={fieldClass} bind:value={form.assignedState}
+            oninput={(e) => { const el = e.target as HTMLInputElement; el.value = el.value.replace(/[^A-Za-z\s.\-']/g, ""); form.assignedState = el.value; }} />
         </label>
       </div>
 

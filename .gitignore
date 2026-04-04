@@ -8,6 +8,7 @@ docs
 .wrangler
 /.svelte-kit
 /build
+.codex
 
 # OS
 .DS_Store

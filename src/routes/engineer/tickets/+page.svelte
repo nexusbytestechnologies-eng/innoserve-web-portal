@@ -44,7 +44,8 @@
 
   // ── State ─────────────────────────────────────────────────────────────────
 
-  let tickets = $state<Ticket[]>([]);
+  let allTickets = $state<Ticket[]>([]);
+  const tickets = $derived(user ? allTickets.filter((t) => t.assignedEngineerId === user.id) : allTickets);
   let projects = $state<Project[]>([]);
   let loading = $state(true);
 
@@ -80,7 +81,7 @@
 
   async function loadTickets() {
     const all = await fetchTickets();
-    tickets = user ? all.filter((t) => t.assignedEngineerId === user.id) : all;
+    allTickets = all;
   }
 
   onMount(async () => {
@@ -181,7 +182,7 @@
         newStatus,
         remarks.trim() || undefined,
       );
-      tickets = tickets.map((t) => (t.id === updated.id ? { ...t, ...updated } : t));
+      allTickets = allTickets.map((t) => (t.id === updated.id ? { ...t, ...updated } : t));
 
       if (newStatus === 'pending_validation') {
         toast.success('Ticket submitted for admin validation');
@@ -250,7 +251,7 @@
         author: user?.id ?? 'engineer',
       });
       const updated = await updateTicketStatus(ticket.id, 'in_progress');
-      tickets = tickets.map((t) => (t.id === updated.id ? { ...t, ...updated } : t));
+      allTickets = allTickets.map((t) => (t.id === updated.id ? { ...t, ...updated } : t));
       toast.success('Work started');
       invalidate('tickets');
     } catch (err) {
@@ -270,7 +271,7 @@
         author: user?.id ?? 'engineer',
       });
       const updated = await updateTicketStatus(ticket.id, 'resolved');
-      tickets = tickets.map((t) => (t.id === updated.id ? { ...t, ...updated } : t));
+      allTickets = allTickets.map((t) => (t.id === updated.id ? { ...t, ...updated } : t));
       toast.success('Ticket marked as resolved');
       invalidate('tickets');
     } catch (err) {
@@ -294,7 +295,7 @@
         'pending_validation',
         'Sent for admin validation',
       );
-      tickets = tickets.map((t) => (t.id === updated.id ? { ...t, ...updated } : t));
+      allTickets = allTickets.map((t) => (t.id === updated.id ? { ...t, ...updated } : t));
       toast.success('Ticket submitted for validation');
       invalidate('tickets');
     } catch (err) {
@@ -326,7 +327,7 @@
         remarks: `Support requested: ${escalationLevel}${escalationReason.trim() ? ` — ${escalationReason.trim()}` : ''}`,
         author: user?.id ?? 'engineer',
       });
-      tickets = tickets.map((t) => (t.id === updated.id ? { ...t, ...updated } : t));
+      allTickets = allTickets.map((t) => (t.id === updated.id ? { ...t, ...updated } : t));
       toast.success(`Support request sent (${escalationLevel})`);
       escalateModal = null;
     } catch (err) {

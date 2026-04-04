@@ -32,10 +32,10 @@ const FETCH_ENGINEER_PROFILES = `
     engineerProfiles {
       id userId referenceId
       userName userEmail userPhone
-      addressState addressCity assignedState
+      addressState addressCity addressPincode assignedState
       documentsStatus profilePhotoUrl
       aadhaarUrl panCardUrl dlUrl cancelChequeUrl
-      accountHolderName createdAt
+      bankAccountNumber ifscCode accountHolderName createdAt
     }
   }
 `;

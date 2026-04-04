@@ -63,7 +63,7 @@
         headers = { 'Content-Type': 'application/json' };
       }
 
-      const updated = await restRequest<User>('/api/users/me', { method: 'PATCH', body, headers });
+      const { user: updated } = await restRequest<{ user: User }>('/api/users/me', { method: 'PATCH', body, headers });
       if (user) authStore.setUser({ ...user, ...updated });
       avatarFile    = null;
       avatarPreview = null;
@@ -174,6 +174,8 @@
         <div class="relative shrink-0">
           {#if avatarPreview}
             <img src={avatarPreview} alt="Avatar preview" class="w-16 h-16 rounded-full object-cover" />
+          {:else if user?.avatarFileId}
+            <img src={`/file/${user.avatarFileId}`} alt="Avatar" class="w-16 h-16 rounded-full object-cover" />
           {:else}
             <div class="w-16 h-16 rounded-full bg-[#E87D1F] flex items-center justify-center text-white text-[18px] font-bold">
               {user?.name?.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase() ?? '?'}

@@ -62,14 +62,15 @@ export async function restRequest<T>(
   path: string,
   init: RequestInit = {},
 ): Promise<T> {
-  const { headers, ...rest } = init;
+  const { headers, body, ...rest } = init;
+  const isFormData = body instanceof FormData;
 
   const res = await fetch(path, {
     credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(headers as Record<string, string>),
-    },
+    headers: isFormData
+      ? ((headers as Record<string, string>) ?? {})
+      : { 'Content-Type': 'application/json', ...(headers as Record<string, string>) },
+    body,
     ...rest,
   });
 
