@@ -40,8 +40,6 @@
       { label: "Engineers", href: "/national-head/engineers", icon: "hardhat" },
       { label: "Projects", href: "/national-head/projects", icon: "folder" },
       { label: "Tickets", href: "/national-head/tickets", icon: "ticket" },
-      { label: "Reports", href: "/national-head/reports", icon: "chart" },
-      { label: "SLA", href: "/national-head/sla", icon: "shield" },
       { label: "Payouts", href: "/national-head/payouts", icon: "dollar" },
     ],
     engineer: [

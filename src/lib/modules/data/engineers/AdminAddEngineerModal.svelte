@@ -53,6 +53,7 @@
 
   let currentStep = $state(0);
   let isSubmitting = $state(false);
+  let emailCheckStatus = $state<"idle" | "checking" | "taken" | "ok">("idle");
 
   let form = $state({
     fullName: "",
@@ -99,6 +100,28 @@
     return null;
   }
 
+  async function checkEmailAvailability() {
+    const email = form.email.trim();
+    if (!email || !/^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/.test(email)) {
+      emailCheckStatus = "idle";
+      return;
+    }
+    emailCheckStatus = "checking";
+    try {
+      const res = await fetch("/api/check-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, flow: "engineer" }),
+      });
+      const data = await res.json();
+      emailCheckStatus = data.exists ? "taken" : "ok";
+      if (data.exists) errors.email = "Email is already in use";
+      else delete errors.email;
+    } catch {
+      emailCheckStatus = "idle";
+    }
+  }
+
   function validateStep(step: number): boolean {
     errors = {};
 
@@ -121,6 +144,8 @@
         !/^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/.test(email)
       )
         errors.email = "Enter a valid email address";
+      else if (emailCheckStatus === "taken")
+        errors.email = "Email is already in use";
 
       if (!form.state) errors.state = "Please select a state";
 
@@ -484,12 +509,21 @@
             <span class={lbl}
               >Email Address <span class="text-red-400">*</span></span
             >
-            <input
-              type="email"
-              bind:value={form.email}
-              class="{inp} {errors.email ? 'border-red-300' : ''}"
-              placeholder="engineer@example.com"
-            />
+            <div class="relative">
+              <input
+                type="email"
+                bind:value={form.email}
+                onblur={checkEmailAvailability}
+                oninput={() => { emailCheckStatus = "idle"; delete errors.email; }}
+                class="{inp} {errors.email || emailCheckStatus === 'taken' ? 'border-red-300' : emailCheckStatus === 'ok' ? 'border-green-400' : ''}"
+                placeholder="engineer@example.com"
+              />
+              {#if emailCheckStatus === "checking"}
+                <span class="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-gray-400">Checking…</span>
+              {:else if emailCheckStatus === "ok"}
+                <span class="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-green-600">Available</span>
+              {/if}
+            </div>
             {#if errors.email}<span class={err}>{errors.email}</span>{/if}
           </label>
 
@@ -617,8 +651,9 @@
                       class="hidden"
                       accept=".jpg,.jpeg,.png,.pdf"
                       onchange={(e) => {
-                        (form as Record<string, unknown>)[doc.key] =
-                          (e.target as HTMLInputElement).files?.[0] ?? null;
+                        const f = (e.target as HTMLInputElement).files?.[0] ?? null;
+                        (form as Record<string, unknown>)[doc.key] = f;
+                        if (f) delete (errors as Record<string, string>)[doc.key];
                       }}
                     />
                   </label>
@@ -685,8 +720,9 @@
                 class="hidden"
                 accept=".jpg,.jpeg,.png,.pdf"
                 onchange={(e) => {
-                  form.panFile =
-                    (e.target as HTMLInputElement).files?.[0] ?? null;
+                  const f = (e.target as HTMLInputElement).files?.[0] ?? null;
+                  form.panFile = f;
+                  if (f) delete errors.panFile;
                 }}
               />
             </label>
@@ -759,8 +795,9 @@
                       class="hidden"
                       accept=".jpg,.jpeg,.png,.pdf"
                       onchange={(e) => {
-                        (form as Record<string, unknown>)[doc.key] =
-                          (e.target as HTMLInputElement).files?.[0] ?? null;
+                        const f = (e.target as HTMLInputElement).files?.[0] ?? null;
+                        (form as Record<string, unknown>)[doc.key] = f;
+                        if (f) delete (errors as Record<string, string>)[doc.key];
                       }}
                     />
                   </label>
@@ -872,23 +909,34 @@
               class="flex items-center gap-3 px-4 py-3 border-2 border-dashed rounded-xl cursor-pointer transition-colors
                          {errors.cancelChequeFile
                 ? 'border-red-300 bg-red-50'
-                : 'border-gray-200 hover:border-[#0B182A] bg-gray-50'}"
+                : form.cancelChequeFile
+                  ? 'border-green-400 bg-green-50'
+                  : 'border-gray-200 hover:border-[#0B182A] bg-gray-50'}"
             >
               <svg
-                class="w-5 h-5 text-gray-400 shrink-0"
+                class="w-5 h-5 {form.cancelChequeFile ? 'text-green-500' : 'text-gray-400'} shrink-0"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
               >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="1.5"
-                  d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                />
+                {#if form.cancelChequeFile}
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                {:else}
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="1.5"
+                    d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                  />
+                {/if}
               </svg>
               <div class="flex-1 min-w-0">
-                <p class="text-[12px] font-medium text-gray-700 truncate">
+                <p class="text-[12px] font-medium {form.cancelChequeFile ? 'text-green-700' : 'text-gray-700'} truncate">
                   {fileLabel(form.cancelChequeFile)}
                 </p>
                 <p class="text-[11px] text-gray-400 mt-0.5">
@@ -900,8 +948,9 @@
                 class="hidden"
                 accept=".jpg,.jpeg,.png,.pdf"
                 onchange={(e) => {
-                  form.cancelChequeFile =
-                    (e.target as HTMLInputElement).files?.[0] ?? null;
+                  const f = (e.target as HTMLInputElement).files?.[0] ?? null;
+                  form.cancelChequeFile = f;
+                  if (f) delete errors.cancelChequeFile;
                 }}
               />
             </label>

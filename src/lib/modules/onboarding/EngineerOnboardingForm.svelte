@@ -834,8 +834,9 @@
                       class="hidden"
                       accept=".jpg,.jpeg,.png,.pdf"
                       onchange={(e) => {
-                        form.aadhaarFront =
-                          (e.target as HTMLInputElement).files?.[0] ?? null;
+                        const f = (e.target as HTMLInputElement).files?.[0] ?? null;
+                        form.aadhaarFront = f;
+                        if (f) delete errors.aadhaarFront;
                       }}
                     />
                     {#if errors.aadhaarFront}<span class={errorClass}
@@ -909,8 +910,9 @@
                       class="hidden"
                       accept=".jpg,.jpeg,.png,.pdf"
                       onchange={(e) => {
-                        form.aadhaarBack =
-                          (e.target as HTMLInputElement).files?.[0] ?? null;
+                        const f = (e.target as HTMLInputElement).files?.[0] ?? null;
+                        form.aadhaarBack = f;
+                        if (f) delete errors.aadhaarBack;
                       }}
                     />
                     {#if errors.aadhaarBack}<span class={errorClass}
@@ -987,8 +989,9 @@
                   class="hidden"
                   accept=".jpg,.jpeg,.png,.pdf"
                   onchange={(e) => {
-                    form.panFile =
-                      (e.target as HTMLInputElement).files?.[0] ?? null;
+                    const f = (e.target as HTMLInputElement).files?.[0] ?? null;
+                    form.panFile = f;
+                    if (f) delete errors.panFile;
                   }}
                 />
                 {#if errors.panFile}
@@ -1069,8 +1072,9 @@
                       class="hidden"
                       accept=".jpg,.jpeg,.png,.pdf"
                       onchange={(e) => {
-                        form.dlFront =
-                          (e.target as HTMLInputElement).files?.[0] ?? null;
+                        const f = (e.target as HTMLInputElement).files?.[0] ?? null;
+                        form.dlFront = f;
+                        if (f) delete errors.dlFront;
                       }}
                     />
                     {#if errors.dlFront}<span class={errorClass}
@@ -1144,8 +1148,9 @@
                       class="hidden"
                       accept=".jpg,.jpeg,.png,.pdf"
                       onchange={(e) => {
-                        form.dlBack =
-                          (e.target as HTMLInputElement).files?.[0] ?? null;
+                        const f = (e.target as HTMLInputElement).files?.[0] ?? null;
+                        form.dlBack = f;
+                        if (f) delete errors.dlBack;
                       }}
                     />
                     {#if errors.dlBack}<span class={errorClass}
@@ -1352,8 +1357,9 @@
                   class="hidden"
                   accept=".jpg,.jpeg,.png,.pdf"
                   onchange={(e) => {
-                    form.cancelChequeFile =
-                      (e.target as HTMLInputElement).files?.[0] ?? null;
+                    const f = (e.target as HTMLInputElement).files?.[0] ?? null;
+                    form.cancelChequeFile = f;
+                    if (f) delete errors.cancelChequeFile;
                   }}
                 />
                 {#if errors.cancelChequeFile}
