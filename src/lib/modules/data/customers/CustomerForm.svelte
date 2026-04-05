@@ -39,6 +39,54 @@
 
   let errors = $state<Record<string, string>>({});
   let saving = $state(false);
+  let emailCheckStatus = $state<"idle" | "checking" | "taken" | "ok">("idle");
+  let secEmailCheckStatus = $state<"idle" | "checking" | "taken" | "ok">("idle");
+
+  async function checkEmail(field: "primary" | "secondary") {
+    const email = field === "primary"
+      ? form.email.trim()
+      : form.secondaryContactEmail.trim();
+
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      if (field === "primary") emailCheckStatus = "idle";
+      else secEmailCheckStatus = "idle";
+      return;
+    }
+
+    // In edit mode skip check if email hasn't changed from original
+    const originalEmail = field === "primary"
+      ? (data?.email ?? "")
+      : (data?.secondaryContactEmail ?? "");
+    if (mode === "edit" && email.toLowerCase() === originalEmail.trim().toLowerCase()) {
+      if (field === "primary") emailCheckStatus = "idle";
+      else secEmailCheckStatus = "idle";
+      return;
+    }
+
+    if (field === "primary") emailCheckStatus = "checking";
+    else secEmailCheckStatus = "checking";
+
+    try {
+      const res = await fetch("/api/check-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, flow: "customer" }),
+      });
+      const result = await res.json();
+      if (field === "primary") {
+        emailCheckStatus = result.exists ? "taken" : "ok";
+        if (result.exists) errors.email = "Email is already in use";
+        else delete errors.email;
+      } else {
+        secEmailCheckStatus = result.exists ? "taken" : "ok";
+        if (result.exists) errors.secondaryContactEmail = "Email is already in use";
+        else delete errors.secondaryContactEmail;
+      }
+    } catch {
+      if (field === "primary") emailCheckStatus = "idle";
+      else secEmailCheckStatus = "idle";
+    }
+  }
 
   function validate() {
     errors = {};
@@ -53,9 +101,11 @@
     if (!contact) errors.contact = "Contact person name is required";
     else if (!/^[A-Za-z\s.\-']+$/.test(contact)) errors.contact = "Name must contain only letters";
 
-    // Primary email: if provided, valid format
+    // Primary email: if provided, valid format; also guard duplicate check result
     if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim()))
       errors.email = "Enter a valid email address";
+    else if (emailCheckStatus === "taken")
+      errors.email = "Email is already in use";
 
     // Primary phone: required, 10-digit Indian mobile (starts 6–9)
     const phone = form.phone.trim();
@@ -78,9 +128,11 @@
     if (secName && !/^[A-Za-z\s.\-']+$/.test(secName))
       errors.secondaryContactName = "Name must contain only letters";
 
-    // Secondary email: if provided, valid format
+    // Secondary email: if provided, valid format; also guard duplicate check result
     if (form.secondaryContactEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.secondaryContactEmail.trim()))
       errors.secondaryContactEmail = "Enter a valid email address";
+    else if (secEmailCheckStatus === "taken")
+      errors.secondaryContactEmail = "Email is already in use";
 
     // Secondary phone: if provided, 10-digit Indian mobile
     const secPhone = form.secondaryContactPhone.trim();
@@ -215,15 +267,24 @@
       <div class="grid grid-cols-2 gap-4">
         <label class={labelClass}>
           <span class={labelTextClass}>Email</span>
-          <input
-            type="email"
-            placeholder="e.g. arun@hdfc.com"
-            class="{fieldClass} {errors.email
-              ? 'border-red-400 focus:border-red-400 focus:ring-red-400/10'
-              : ''}"
-            bind:value={form.email}
-            disabled={saving}
-          />
+          <div class="relative">
+            <input
+              type="email"
+              placeholder="e.g. arun@hdfc.com"
+              class="{fieldClass} {errors.email || emailCheckStatus === 'taken'
+                ? 'border-red-400 focus:border-red-400 focus:ring-red-400/10'
+                : emailCheckStatus === 'ok' ? 'border-green-400' : ''}"
+              bind:value={form.email}
+              disabled={saving}
+              onblur={() => checkEmail("primary")}
+              oninput={() => { emailCheckStatus = "idle"; delete errors.email; }}
+            />
+            {#if emailCheckStatus === "checking"}
+              <span class="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">Checking…</span>
+            {:else if emailCheckStatus === "ok"}
+              <span class="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-green-600">Available</span>
+            {/if}
+          </div>
           {#if errors.email}<span class={errorClass}>{errors.email}</span>{/if}
         </label>
         <label class={labelClass}>
@@ -329,15 +390,24 @@
       <div class="grid grid-cols-2 gap-4">
         <label class={labelClass}>
           <span class={labelTextClass}>Email</span>
-          <input
-            type="email"
-            placeholder="e.g. priya@hdfc.com"
-            class="{fieldClass} {errors.secondaryContactEmail
-              ? 'border-red-400 focus:border-red-400 focus:ring-red-400/10'
-              : ''}"
-            bind:value={form.secondaryContactEmail}
-            disabled={saving}
-          />
+          <div class="relative">
+            <input
+              type="email"
+              placeholder="e.g. priya@hdfc.com"
+              class="{fieldClass} {errors.secondaryContactEmail || secEmailCheckStatus === 'taken'
+                ? 'border-red-400 focus:border-red-400 focus:ring-red-400/10'
+                : secEmailCheckStatus === 'ok' ? 'border-green-400' : ''}"
+              bind:value={form.secondaryContactEmail}
+              disabled={saving}
+              onblur={() => checkEmail("secondary")}
+              oninput={() => { secEmailCheckStatus = "idle"; delete errors.secondaryContactEmail; }}
+            />
+            {#if secEmailCheckStatus === "checking"}
+              <span class="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">Checking…</span>
+            {:else if secEmailCheckStatus === "ok"}
+              <span class="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-green-600">Available</span>
+            {/if}
+          </div>
           {#if errors.secondaryContactEmail}<span class={errorClass}>{errors.secondaryContactEmail}</span>{/if}
         </label>
         <label class={labelClass}>

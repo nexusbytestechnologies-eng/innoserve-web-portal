@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { onMount } from "svelte";
   import * as Icons from "$lib/icons";
   import { fetchEngineerProfiles, type EngineerProfile } from "./queries";
   import { updateEngineerDocumentsStatus, updateEngineer } from "./actions";
   import { toast } from "svelte-sonner";
+  import { queryVersion } from "$lib/stores/query";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import EngineerDocumentsModal from "./EngineerDocumentsModal.svelte";
   import AdminAddEngineerModal from "./AdminAddEngineerModal.svelte";
@@ -34,7 +34,8 @@
     action: () => Promise<void>;
   } | null>(null);
 
-  onMount(async () => {
+  async function loadEngineers() {
+    loading = true;
     try {
       engineers = await fetchEngineerProfiles();
     } catch (err) {
@@ -42,6 +43,11 @@
     } finally {
       loading = false;
     }
+  }
+
+  $effect(() => {
+    $queryVersion.engineers;
+    loadEngineers();
   });
 
   function promptApprove(eng: EngineerProfile) {
